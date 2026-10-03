@@ -35,7 +35,16 @@ jobs:
           mkdir -p docs/data
           API=$(grep -oE "https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec" docs/assets/js/config.js | head -1 || true)
           changed=true
-          if [ -n "$API" ] && curl -sfL --retry 3 --retry-delay 5 --max-time 90 "$API?action=data" -o raw.json \
+          echo "Apps Script URL found: $([ -n "$API" ] && echo yes || echo no)"
+          code=000
+          for i in 1 2 3 4; do
+            code=$(curl -sL --max-time 90 -A "Mozilla/5.0 (rattana-help snapshot)" -o raw.json -w '%{http_code}' "$API?action=data" || echo 000)
+            echo "attempt $i: HTTP $code"
+            [ "$code" = "200" ] && grep -q '"ok":true' raw.json && break
+            head -c 200 raw.json 2>/dev/null | tr '\n' ' '; echo
+            sleep $((i * 8))
+          done
+          if [ -n "$API" ] && [ "$code" = "200" ] \
              && node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('raw.json','utf8'));if(!j.ok)process.exit(1);delete j.data.generated_at;fs.writeFileSync('docs/data/snapshot.json',JSON.stringify(j.data));"; then
             echo "Snapshot: $(wc -c < docs/data/snapshot.json) bytes"
             if curl -sfL "$LIVE" -o live.json && cmp -s live.json docs/data/snapshot.json; then changed=false; fi
