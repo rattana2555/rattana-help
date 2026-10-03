@@ -187,9 +187,10 @@
       </section>`;
     countUp(view);
 
-    // Hero parallax (photo drifts slower than the page)
+    // Hero parallax (photo drifts slower than the page) — desktop pointers only; on phones it makes scrolling stutter
     const media = document.getElementById('heroMedia');
-    if (!reduceMotion()) {
+    if (!reduceMotion() && window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 900px)').matches) {
+      media.style.willChange = 'transform';
       let raf = 0;
       const onScroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const y = Math.min(window.scrollY, 900); media.style.transform = `translate3d(0, ${y * 0.32}px, 0)`; }); };
       window.addEventListener('scroll', onScroll, { passive: true });
