@@ -1,0 +1,17 @@
+# Render Blueprint — New → Blueprint → pick this repo. Needs a plan with a persistent disk.
+services:
+  - type: web
+    name: rattana-help
+    runtime: docker
+    healthCheckPath: /api/health
+    envVars:
+      - key: ADMIN_PASSWORD   # first main-admin password (username: admin) — set it in the Render dashboard
+        sync: false
+      - key: SEED_DEMO
+        value: "0"
+      - key: TRUST_PROXY
+        value: "1"
+    disk:
+      name: rattana-data
+      mountPath: /data
+      sizeGB: 5

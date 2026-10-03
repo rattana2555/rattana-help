@@ -1,0 +1,16 @@
+{
+  "name": "rattana-help",
+  "version": "2.1.0",
+  "private": true,
+  "description": "RATTANA HELP — ศูนย์กลางแสดงข้อมูลและติดตามการส่งต่อความช่วยเหลือผู้ประสบภัยน้ำท่วม โดยรัตนไพบูลย์",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "reset": "node db.js --reset",
+    "reset:empty": "node db.js --reset --no-demo",
+    "backup": "node scripts/backup.js"
+  }
+}

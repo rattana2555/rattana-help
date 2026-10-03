@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#F3F8FF">
+  <meta name="robots" content="noindex, nofollow">
+  <title>RATTANA HELP Admin v2.0</title>
+  <link rel="icon" href="/assets/img/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+Thai:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="/assets/css/style.css">
+  <link rel="stylesheet" href="/assets/css/admin.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
+  <script src="/assets/js/config.js" defer></script>
+  <script src="/assets/js/common.js" defer></script>
+  <script src="/assets/js/admin.js" defer></script>
+</head>
+<body class="admin">
+  <div id="loadingBar"></div>
+
+  <!-- Login -->
+  <section id="loginScreen" class="login" hidden>
+    <form class="login-card" id="loginForm" autocomplete="on">
+      <img src="/assets/img/logo.png" alt="รัตนไพบูลย์" width="72" height="72">
+      <h1>RATTANA <span>HELP</span></h1>
+      <p>ระบบผู้ดูแลสำหรับทีมรัตนไพบูลย์</p>
+      <label class="field"><span>ชื่อผู้ใช้</span><input class="input" name="username" autocomplete="username" required autofocus></label>
+      <label class="field"><span>รหัสผ่าน</span><input class="input" name="password" type="password" autocomplete="current-password" required></label>
+      <div class="login-error" id="loginError" role="alert" hidden></div>
+      <button class="btn btn-gold btn-block" type="submit">เข้าสู่ระบบ</button>
+      <a class="login-back" href="/">← กลับไปหน้าเว็บไซต์</a>
+    </form>
+  </section>
+
+  <!-- App -->
+  <div id="appScreen" hidden>
+    <header class="adm-header">
+      <a class="brand" href="/admin">
+        <img src="/assets/img/logo.png" alt="" width="36" height="36">
+        <span><span class="brand-name">RATTANA <span>HELP</span></span><span class="brand-sub">Admin · v2.0</span></span>
+      </a>
+      <div class="adm-actions">
+        <a class="icon-btn" href="/" target="_blank" rel="noopener" title="ดูหน้าเว็บไซต์" aria-label="ดูหน้าเว็บไซต์"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></a>
+        <button class="icon-btn" id="btnRefresh" title="รีเฟรชข้อมูล" aria-label="รีเฟรชข้อมูล"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+        <button class="icon-btn" id="btnDark" title="โหมดมืด" aria-label="สลับโหมดมืด"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/></svg></button>
+        <button class="user-btn" id="btnUser" aria-label="บัญชีผู้ใช้"><span id="userName"></span><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 16l4-4-4-4M14 12H4"/></svg></button>
+      </div>
+    </header>
+    <nav class="adm-tabs" id="tabs" aria-label="เมนูผู้ดูแล">
+      <button class="adm-tab" data-tab="overview">ภาพรวม</button>
+      <button class="adm-tab" data-tab="projects">โครงการ</button>
+      <button class="adm-tab" data-tab="locations">จุดช่วยเหลือ</button>
+      <button class="adm-tab" data-tab="photos">ภาพถ่าย</button>
+      <button class="adm-tab" data-tab="areas">จังหวัด / พื้นที่</button>
+      <button class="adm-tab" data-tab="admins">ผู้ดูแลระบบ</button>
+    </nav>
+    <main class="adm-main" id="adm"></main>
+  </div>
+
+  <button id="backToTop" aria-label="กลับขึ้นด้านบน">↑</button>
+
+  <div class="modal-overlay" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <form class="modal" id="modalForm" novalidate>
+      <div class="modal-head"><h3 id="modalTitle"></h3><button type="button" class="modal-close" data-close aria-label="ปิด">×</button></div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-foot" id="modalFoot"></div>
+    </form>
+  </div>
+</body>
+</html>

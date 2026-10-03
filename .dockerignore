@@ -1,0 +1,6 @@
+data/
+uploads/
+backups/
+.claude/
+.git/
+*.md
