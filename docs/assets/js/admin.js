@@ -1245,7 +1245,24 @@ ${field ? `
     main.innerHTML = `
       <div class="page-title"><div><h1>ผู้ดูแลระบบ</h1><p>บัญชีสำหรับทีมรัตนไพบูลย์ · ผู้ดูแลหลัก ${rows.filter(r => r.role === 'super').length} คน · ทีมภาคสนาม ${rows.filter(r => r.role === 'field').length} คน</p></div><button class="btn btn-gold" id="addAdmin">${icon('plus')} เพิ่มบัญชีทีม</button></div>
       <section class="acard"><div id="tbl"></div></section>
+      ${window.RH.backend === 'apps-script' ? `<section class="acard" id="donCard"><div class="acard-head"><h2>${icon('heart')} หน้าผู้ร่วมบริจาค</h2><span class="acard-sub">ดึงรายชื่อจากชีตบริจาค · แสดงเฉพาะรายการที่สถานะอนุมัติแล้ว</span></div>
+        <div class="acard-body"><p id="donStatus" style="color:var(--muted);font-size:13.5px">กำลังตรวจสอบ…</p>
+          <form id="donForm" class="inline-actions" style="margin-top:10px;align-items:stretch">
+            <input class="input" name="url" placeholder="วางลิงก์ Google Sheets ของชีตบริจาค" style="flex:1;min-width:220px">
+            <button class="btn btn-gold" type="submit">${icon('check')} บันทึก</button>
+          </form>
+          <p style="color:var(--muted-2);font-size:12px;margin-top:8px">ลิงก์ชีตเก็บไว้ในระบบหลังบ้านเท่านั้น ไม่แสดงบนหน้าเว็บ · หน้าเว็บไม่แสดงเบอร์โทรและสลิป</p></div></section>` : ''}
       ${passwordCard()}`;
+    if ($('#donCard')) {
+      const showDon = r => { $('#donStatus').innerHTML = r.configured ? `${icon('check')} เชื่อมต่อแล้ว · อนุมัติแล้ว <b>${fmtNum(r.approved)}</b> รายการ · รอตรวจ <b>${fmtNum(r.pending)}</b> รายการ${r.url ? ` · <a class="link-more" href="${esc(r.url)}" target="_blank" rel="noopener">เปิดชีต</a>` : ''}` : 'ยังไม่ได้เชื่อมต่อชีตบริจาค'; };
+      call('/api/admin/donation-sheet').then(showDon).catch(e => { $('#donStatus').textContent = e.status === 404 ? 'ต้องอัปเดต Code.gs ใน Apps Script ก่อนจึงจะใช้ได้' : e.message; });
+      $('#donForm').onsubmit = async e => {
+        e.preventDefault();
+        const btn = e.target.querySelector('button'); btn.disabled = true;
+        try { const r = await call('/api/admin/donation-sheet', { method: 'PUT', body: { url: e.target.url.value } }); showDon(r); e.target.url.value = ''; toast('เชื่อมต่อชีตบริจาคแล้ว — หน้าเว็บจะแสดงภายใน 1 นาที', 'success'); }
+        catch (err) { fail(err); } finally { btn.disabled = false; }
+      };
+    }
     table($('#tbl'), {
       rows, sort: { key: 'last_login_at', dir: 'desc' },
       cols: [

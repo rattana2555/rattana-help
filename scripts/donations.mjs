@@ -1,4 +1,4 @@
-// Builds docs/data/donations.json for the public "บริจาค" page from the donation tab of the order sheet.
+// Builds docs/data/donations.json for the public "บริจาค" page from the donation sheet.
 // Only what the page needs leaves this script: never phone numbers, payment slips or full names.
 //   · approved donations only (slip checked); pending ones are counted, not listed
 //   · donor names partly hidden ("ออม" → "อ**")
@@ -10,7 +10,8 @@
 import { writeFileSync } from 'node:fs';
 
 const ID = (process.env.DONATIONS_SHEET_ID || '').trim();
-const SHEET = process.env.DONATIONS_SHEET || 'บริจาค';
+// Which tab: DONATIONS_SHEET (tab name) if set, otherwise the first tab of the sheet
+const SHEET = (process.env.DONATIONS_SHEET || '').trim();
 const OUT = process.argv[2] || 'docs/data/donations.json';
 if (!ID) { console.log('DONATIONS_SHEET_ID not set: skipping donations'); process.exit(0); }
 
@@ -35,7 +36,8 @@ function parseCsv(text) {
 }
 
 async function fetchCsv() {
-  const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(ID)}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET)}`;
+  const tab = SHEET ? `sheet=${encodeURIComponent(SHEET)}` : 'gid=0';
+  const url = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(ID)}/gviz/tq?tqx=out:csv&${tab}`;
   let last;
   for (let i = 1; i <= 4; i++) {
     try {

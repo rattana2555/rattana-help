@@ -377,6 +377,10 @@
   on('PUT', '/api/admin/admins/(\\d+)', async ([id], __, b) => write('adminUpdate', { ...b, id: +id }));
   on('DELETE', '/api/admin/admins/(\\d+)', async ([id]) => write('adminDelete', { id: +id }));
   on('PUT', '/api/admin/me/password', async (_, __, b) => gasPost('changePassword', b));
+  // Donations page: live list from the donation sheet (Apps Script caches it for 60 s)
+  on('GET', '/api/donations', async () => gasGet('donations'));
+  on('GET', '/api/admin/donation-sheet', async () => gasPost('donationSheet'));
+  on('PUT', '/api/admin/donation-sheet', async (_, __, b) => gasPost('donationSheet', { url: b.url || '' }));
 
   RH.api = async function (path, { method = 'GET', body } = {}) {
     const [p, qs = ''] = String(path).split('?');

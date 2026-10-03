@@ -889,13 +889,31 @@
 
   // ─────────────── router ───────────────
   // ─────────────── DONATIONS ───────────────
-  // data/donations.json is built every 10 min by the deploy workflow (scripts/donations.mjs) from the
-  // donation sheet: approved (slip-checked) donations only, names partly hidden, no phone numbers or slips
+  // Approved (slip-checked) donations only, names partly hidden, no phone numbers or slips.
+  // Drawn at once from data/donations.json (baked into the site by the deploy workflow), then replaced by
+  // the live list from Apps Script (≤ 1 min behind the sheet) and refreshed every minute while open.
   async function pageDonate(id) {
+    const live = () => (window.RH.backend === 'apps-script' ? api('/api/donations').catch(() => null) : Promise.resolve(null));
+    const liveNow = live();
     let d = null;
     try { d = await fetch('data/donations.json', { cache: 'no-cache' }).then(r => (r.ok ? r.json() : null)); } catch { /* not built yet */ }
+    if (!d) d = await liveNow;
     if (id !== renderId) return;
     document.title = 'ผู้ร่วมบริจาค · RATTANA HELP';
+    let shown = '';
+    const update = x => {
+      if (!x || id !== renderId) return;
+      const { updated_at, ...rest } = x;
+      const key = JSON.stringify(rest);
+      if (key === shown) return;
+      shown = key; drawDonations(x); enhance(view);
+    };
+    const timer = setInterval(() => live().then(update), 60_000);
+    onCleanup(() => clearInterval(timer));
+    drawDonations(d); shown = d ? JSON.stringify((({ updated_at, ...r }) => r)(d)) : '';
+    liveNow.then(update);
+  }
+  function drawDonations(d) {
     const list = (d && d.donations) || [], pending = (d && d.pending) || { count: 0 };
     const itemText = items => items.map(i => `${esc(i.name)} ${fmtNum(i.qty)} ${esc(String(i.unit || '').replace(/\s*(x\d.*|\(.*\))$/i, ''))}`).join(' · ');
     const stat = (ic, v, unit, label) => `<div class="stat"><div class="stat-ic">${icon(ic)}</div><div class="stat-v"><span data-count="${Number(v) || 0}">0</span><small>${unit}</small></div><div class="stat-l">${label}</div></div>`;
@@ -930,7 +948,7 @@
             ${supportCard('ร่วมบริจาคสิ่งของ')}
           </aside>
         </div>
-        <p class="don-note">ข้อมูลอัปเดตอัตโนมัติทุกประมาณ 10 นาที</p>
+        <p class="don-note">อัปเดตอัตโนมัติ · รายการที่ทีมงานอนุมัติแล้วจะขึ้นภายในประมาณ 1 นาที</p>
       </div>`;
     countUp(view);
   }

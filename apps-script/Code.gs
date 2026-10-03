@@ -114,6 +114,7 @@ function doGet(e) {
     var action = (e && e.parameter && e.parameter.action) || 'data';
     if (action === 'data') return out_({ ok: true, data: publicDataCached_() });
     if (action === 'ping') return out_({ ok: true, data: { time: now_() } });
+    if (action === 'donations') return out_({ ok: true, data: donationsData_() });
     throw err_(404, 'Not found');
   } catch (x) { return fail_(x); }
 }
@@ -180,7 +181,8 @@ var ACTIONS = {
   adminCreate: { write: true, fn: adminCreate_ },
   adminUpdate: { write: true, fn: adminUpdate_ },
   adminDelete: { write: true, fn: adminDelete_ },
-  changePassword: { field: true, fn: changePassword_ }
+  changePassword: { field: true, fn: changePassword_ },
+  donationSheet: { fn: donationSheet_ }
 };
 
 function out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
@@ -668,4 +670,100 @@ function changePassword_(b, me) {
   update_('admins', me.id, { salt: salt, password_hash: hash_(String(b.new_password), salt) });
   dropSessions_(me.id, b.token);
   return { ok: true };
+}
+
+// ───────────────────────── donations (public "ผู้ร่วมบริจาค" page) ─────────────────────────
+// The donation sheet (its id is set from the admin page, kept in Script Properties — not in this code)
+// is read here and only what the public page needs goes out: approved (slip-checked) donations,
+// donor names partly hidden, never phone numbers or slips. Cached for 60 s.
+var DON_PROP = 'DONATIONS_SHEET_ID';
+function donationsData_() {
+  var cache = CacheService.getScriptCache(), hit = cache.get('DON');
+  if (hit) return JSON.parse(hit);
+  var id = PropertiesService.getScriptProperties().getProperty(DON_PROP);
+  if (!id) return null;
+  var data = buildDonations_(readDonationRows_(id));
+  data.updated_at = now_();
+  try { cache.put('DON', JSON.stringify(data), 60); } catch (x) { /* too big to cache: fine */ }
+  return data;
+}
+function readDonationRows_(id) {
+  try { return SpreadsheetApp.openById(id).getSheets()[0].getDataRange().getDisplayValues(); }
+  catch (x) { // not shared with this account: read the public CSV instead
+    var res = UrlFetchApp.fetch('https://docs.google.com/spreadsheets/d/' + encodeURIComponent(id) + '/gviz/tq?tqx=out:csv&gid=0', { muteHttpExceptions: true });
+    if (res.getResponseCode() !== 200 || /^\s*</.test(res.getContentText())) throw err_(502, 'อ่านชีตบริจาคไม่ได้ — ตรวจสอบลิงก์และสิทธิ์การแชร์');
+    return Utilities.parseCsv(res.getContentText());
+  }
+}
+// Thai-aware characters: a base letter plus its vowel/tone marks
+function graphemesTh_(s) { return String(s).match(/[\s\S][ัิ-ฺ็-๎]*/g) || []; }
+function maskName_(name) {
+  var words = String(name || '').trim().split(/\s+/).filter(function (w) { return w; });
+  if (!words.length) return 'ผู้ไม่ประสงค์ออกนาม';
+  return words.slice(0, 2).map(function (w) {
+    var g = graphemesTh_(w), keep = Math.max(1, Math.ceil(g.length / 3));
+    return g.slice(0, keep).join('') + new Array(Math.min(3, Math.max(1, g.length - keep)) + 1).join('*');
+  }).join(' ');
+}
+function donDate_(v) {
+  var s = String(v || '').trim(), m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
+  if (m) { var y = +m[3]; if (y > 2400) y -= 543; return y + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2); }
+  return null;
+}
+function donNum_(v) { var n = Number(String(v == null ? '' : v).replace(/[,\s฿]/g, '')); return isFinite(n) ? n : 0; }
+function donApproved_(s) { return /อนุมัติ|ยืนยัน|ตรวจแล้ว|ตรวจสอบแล้ว|สำเร็จ|ผ่าน|ได้รับ|approved/i.test(s || '') && !/ไม่|รอ|ปฏิเสธ|ยกเลิก|reject|pending/i.test(s || ''); }
+function buildDonations_(rows) {
+  rows = (rows || []).filter(function (r) { return r.some(function (v) { return String(v).trim(); }); });
+  var head = (rows.shift() || []).map(function (h) { return String(h).trim(); });
+  var c = function (n) { return head.indexOf(n); };
+  var C = { date: c('วัน'), time: c('เวลา'), order: c('orderId'), name: c('ชื่อร้าน'), kind: c('รูปแบบ'), item: c('ชื่อสินค้า'), qty: c('จำนวน'), unit: c('หน่วย'), amount: c('ยอดเงินรวม'), dest: c('ปลายทาง'), status: c('สถานะอนุมัติ') };
+  ['date', 'order', 'name', 'item', 'qty', 'amount', 'status'].forEach(function (k) { if (C[k] < 0) throw err_(400, 'ชีตบริจาคไม่มีคอลัมน์ที่ต้องใช้ (' + k + ')'); });
+  var get = function (r, k) { return C[k] >= 0 ? String(r[C[k]] == null ? '' : r[C[k]]).trim() : ''; };
+  var orders = {}, order = [];
+  rows.forEach(function (r) {
+    var id = get(r, 'order');
+    if (!id) return;
+    if (/test/i.test(id) || /ทดสอบ/.test(get(r, 'name')) || /ทดสอบ/.test(get(r, 'dest')) || /ยกเลิก/.test(get(r, 'kind'))) return;
+    var o = orders[id];
+    if (!o) { o = orders[id] = { date: donDate_(get(r, 'date')), time: get(r, 'time').replace(':', '.'), donor: get(r, 'name'), status: get(r, 'status'), items: [], amount: 0 }; order.push(o); }
+    if (!o.status) o.status = get(r, 'status');
+    o.items.push({ name: get(r, 'item'), qty: donNum_(get(r, 'qty')), unit: get(r, 'unit') });
+    o.amount += donNum_(get(r, 'amount'));
+  });
+  var ok = order.filter(function (o) { return donApproved_(o.status); });
+  var pend = order.filter(function (o) { return !donApproved_(o.status) && !/ไม่|ปฏิเสธ|ยกเลิก|reject/i.test(o.status || ''); });
+  var totals = {}, donors = {};
+  ok.forEach(function (o) {
+    donors[o.donor.toLowerCase()] = 1;
+    o.items.forEach(function (it) { var k = it.name + '|' + it.unit; totals[k] = totals[k] || { name: it.name, unit: it.unit, qty: 0 }; totals[k].qty += it.qty; });
+  });
+  var r2 = function (n) { return Math.round(n * 100) / 100; };
+  var sum = function (l) { return r2(l.reduce(function (s, o) { return s + o.amount; }, 0)); };
+  return {
+    total_amount: sum(ok), order_count: ok.length, donor_count: Object.keys(donors).length,
+    items: Object.keys(totals).map(function (k) { return totals[k]; }).sort(function (a, b) { return b.qty - a.qty; }),
+    donations: ok.sort(function (a, b) { var x = (b.date || '') + ' ' + b.time, y = (a.date || '') + ' ' + a.time; return x < y ? -1 : x > y ? 1 : 0; })
+      .map(function (o) { return { date: o.date, time: o.time, name: maskName_(o.donor), items: o.items, amount: r2(o.amount) }; }),
+    pending: { count: pend.length, amount: sum(pend) }
+  };
+}
+// Admin (main admin only): set or check the donation sheet
+function donationSheet_(b) {
+  var props = PropertiesService.getScriptProperties();
+  if (b.url !== undefined) {
+    var raw = String(b.url || '').trim();
+    if (!raw) { props.deleteProperty(DON_PROP); CacheService.getScriptCache().remove('DON'); return { configured: false }; }
+    var m = /\/d\/([A-Za-z0-9_-]{20,})/.exec(raw) || /^([A-Za-z0-9_-]{20,})$/.exec(raw);
+    if (!m) throw err_(400, 'ลิงก์ชีตไม่ถูกต้อง');
+    var test = buildDonations_(readDonationRows_(m[1])); // fails here if it can't be read
+    props.setProperty(DON_PROP, m[1]);
+    CacheService.getScriptCache().remove('DON');
+    return { configured: true, approved: test.order_count, pending: test.pending.count };
+  }
+  var id = props.getProperty(DON_PROP);
+  if (!id) return { configured: false };
+  var d = donationsData_();
+  return { configured: true, url: 'https://docs.google.com/spreadsheets/d/' + id + '/edit', approved: d.order_count, pending: d.pending.count };
 }
