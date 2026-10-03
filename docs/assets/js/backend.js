@@ -37,7 +37,8 @@
   //    remembers each write's opId (Code.gs API v3) so a repeated write is answered without running twice
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const SHAPE = {
-    write: d => d && d.data && Array.isArray(d.data.projects), // (a write that returns nothing has no 'result' key)
+    // full answer (whole dataset) or slim answer (only the changed rows); a write that returns nothing has no 'result' key
+    write: d => d && ((d.data && Array.isArray(d.data.projects)) || (d.slim && typeof d.slim === 'object')),
     adminData: d => d && Array.isArray(d.projects) && 'me' in d,
     login: d => d && d.token && d.data && Array.isArray(d.data.projects),
   };
@@ -64,7 +65,7 @@
       if (!notRun) maybeRan = true;
       const safe = notRun || !write || idempotent();
       if (i < tries && safe) { await sleep(900 * i); continue; }
-      if (write && maybeRan) { adm = null; throw new HttpErr(503, 'ระบบ Google ตอบช้าหรือขัดข้องชั่วคราว ไม่แน่ใจว่าบันทึกสำเร็จหรือไม่ — กดรีเฟรชแล้วตรวจสอบอีกครั้ง'); }
+      if (write && maybeRan) { adm = null; admRaw = null; throw new HttpErr(503, 'ระบบ Google ตอบช้าหรือขัดข้องชั่วคราว ไม่แน่ใจว่าบันทึกสำเร็จหรือไม่ — กดรีเฟรชแล้วตรวจสอบอีกครั้ง'); }
       throw new HttpErr(503, 'ระบบ Google ตอบช้าหรือขัดข้องชั่วคราว กรุณาลองอีกครั้ง');
     }
   }
@@ -108,14 +109,25 @@
     if (adm) return adm;
     if (!token()) throw new HttpErr(401, 'กรุณาเข้าสู่ระบบ');
     // several admin views ask at once on first load: share one request
-    if (!admLoading) admLoading = gasPost('adminData').then(d => { adm = build(d, true); return adm; }).finally(() => { admLoading = null; });
+    if (!admLoading) admLoading = gasPost('adminData').then(d => { setAdm(d); return adm; }).finally(() => { admLoading = null; });
     return admLoading;
   }
+  // admRaw = the dataset as Google sent it (build() decorates its input), kept so slim answers can be patched in
+  let admRaw = null;
+  const clone0 = o => JSON.parse(JSON.stringify(o));
+  function setAdm(raw) { admRaw = clone0(raw); adm = build(raw, true); }
   async function write(action, payload) {
     const r = await gasPost(action, payload, { write: true });
-    // parallel writes (photo uploads) can answer out of order: keep the newest snapshot (rev = when it was read)
-    const next = build(r.data, true);
-    if (!adm || !(adm.rev > next.rev)) adm = next;
+    if (r.slim) {
+      if (admRaw) {
+        for (const [t, rows] of Object.entries(r.slim)) {
+          const list = admRaw[t] || (admRaw[t] = []);
+          rows.forEach(row => { const i = list.findIndex(x => x.id === row.id); if (i >= 0) list[i] = row; else list.push(row); });
+        }
+        admRaw.rev = Math.max(admRaw.rev || 0, r.rev || 0);
+        adm = build(clone0(admRaw), true);
+      } else adm = null; // nothing cached yet: the next read fetches everything
+    } else if (!adm || !(adm.rev > (r.data.rev || 0))) setAdm(r.data); // parallel writes can answer out of order: keep the newest
     pub = null; pubKey = ''; store.set(PUB_KEY, null);
     return r.result;
   }
@@ -320,13 +332,13 @@
   on('POST', '/api/admin/login', async (_, __, b) => {
     const r = await gasPost('login', { username: b.username, password: b.password });
     store.set(TOKEN_KEY, r.token);
-    adm = build(r.data, true);
+    setAdm(r.data);
     return r.me;
   });
-  on('POST', '/api/admin/logout', async () => { await gasPost('logout').catch(() => {}); store.set(TOKEN_KEY, null); adm = null; return { ok: true }; });
+  on('POST', '/api/admin/logout', async () => { await gasPost('logout').catch(() => {}); store.set(TOKEN_KEY, null); adm = null; admRaw = null; return { ok: true }; });
   on('GET', '/api/admin/me', async () => (await adminData()).me);
   // the admin 🔄 button: drop the cached dataset so the next read comes fresh from Google
-  on('POST', '/api/admin/reload', async () => { adm = null; await adminData(); return { ok: true }; });
+  on('POST', '/api/admin/reload', async () => { adm = null; admRaw = null; await adminData(); return { ok: true }; });
 
   // admin reads
   on('GET', '/api/admin/dashboard', async () => {
@@ -354,7 +366,8 @@
   on('PATCH', '/api/admin/locations/(\\d+)/status', async ([id], __, b) => write('setStatus', { id: +id, status: b.status }));
   on('PATCH', '/api/admin/locations/(\\d+)/field', async ([id], __, b) => write('fieldUpdate', { ...b, id: +id }));
   on('PUT', '/api/admin/locations/(\\d+)/cover', async ([id], __, b) => write('setCover', { id: +id, photo_id: b.photo_id }));
-  on('POST', '/api/admin/photos', async (_, __, b) => { const { thumb, ...photo } = b; return write('uploadPhoto', { photo }); }); // Drive resizes on the fly; no thumb file needed
+  // Drive resizes on the fly (no thumb file needed); slim = answer with the new photo row only (Code.gs API v4)
+  on('POST', '/api/admin/photos', async (_, __, b) => { const { thumb, ...photo } = b; return write('uploadPhoto', { photo, slim: true }); });
   on('PUT', '/api/admin/photos/(\\d+)', async ([id], __, b) => write('updatePhoto', { ...b, id: +id }));
   on('DELETE', '/api/admin/photos/(\\d+)', async ([id]) => write('deletePhoto', { id: +id }));
   on('POST', '/api/admin/(provinces|districts|subdistricts)', async ([kind], __, b) => write('geoAdd', { ...b, kind }));

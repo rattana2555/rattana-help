@@ -22,7 +22,7 @@ var STEPS = ['support', 'collect', 'prepare', 'transit', 'deliver'];
 var ROLES = ['super', 'field'];
 // Project types (keep in sync with CATEGORIES in docs/assets/js/common.js)
 var CATEGORY_KEYS = ['flood', 'drought', 'fire', 'storm', 'cold', 'community', 'education', 'health', 'other'];
-var API_VERSION = 3;
+var API_VERSION = 4;
 
 var TABLES = {
   // New columns are only ever appended at the end (ensureSchema_ adds them to existing sheets)
@@ -134,17 +134,26 @@ function doPost(e) {
     if (def.write) {
       // opId: the site may resend a write when Google's answer got lost; run each write only once
       var cache = CacheService.getScriptCache(), opKey = body.opId ? 'OP_' + sha_(String(body.opId)) : null;
+      var replay = function () { var d = opKey ? cache.get(opKey) : null; return d !== null && d !== undefined ? { v: JSON.parse(d) } : null; };
+      var hit = replay(), prep = null;
+      // slow work that touches no sheet (e.g. saving a photo to Drive) runs before taking the lock,
+      // so several uploads proceed side by side instead of queueing behind each other
+      if (!hit && def.prepare) prep = def.prepare(body, me);
       var lock = LockService.getScriptLock();
-      lock.waitLock(30000);
       try {
-        var done = opKey ? cache.get(opKey) : null;
-        if (done !== null && done !== undefined) result = JSON.parse(done);
-        else {
-          result = def.fn(body, me);
-          clearPublicCache_();
-          if (opKey) cache.put(opKey, JSON.stringify(result === undefined ? null : result), 21600);
-        }
-      } finally { lock.releaseLock(); }
+        lock.waitLock(30000);
+        try {
+          hit = hit || replay();
+          if (hit) { result = hit.v; if (prep && def.discard) def.discard(prep); }
+          else {
+            result = def.fn(body, me, prep);
+            clearPublicCache_();
+            if (opKey) cache.put(opKey, JSON.stringify(result === undefined ? null : result), 21600);
+          }
+        } finally { lock.releaseLock(); }
+      } catch (x) { if (prep && def.discard && !hit) { try { def.discard(prep); } catch (y) { /* ignore */ } } throw x; }
+      // slim answer: only the rows that changed (the site patches its copy) instead of re-reading every sheet
+      if (body.slim && def.slim) return out_({ ok: true, data: { result: result, slim: def.slim(result), api_version: API_VERSION, rev: Date.now() } });
       return out_({ ok: true, data: { result: result, data: adminData_(me) } });
     }
     return out_({ ok: true, data: def.fn(body, me) });
@@ -162,7 +171,7 @@ var ACTIONS = {
   setStatus: { write: true, field: true, fn: setStatus_ },
   fieldUpdate: { write: true, field: true, fn: fieldUpdate_ },
   setCover: { write: true, field: true, fn: setCover_ },
-  uploadPhoto: { write: true, field: true, fn: uploadPhoto_ },
+  uploadPhoto: { write: true, field: true, prepare: preparePhoto_, discard: discardPhoto_, fn: uploadPhoto_, slim: photoSlim_ },
   updatePhoto: { write: true, field: true, fn: updatePhoto_ },
   deletePhoto: { write: true, field: true, fn: deletePhoto_ },
   geoAdd: { write: true, fn: geoAdd_ },
@@ -512,7 +521,8 @@ function decodeImage_(dataUrl) {
   if (!ok) throw err_(400, 'ไฟล์ภาพไม่ถูกต้อง');
   return { bytes: bytes, mime: m[1], ext: m[2] === 'jpeg' ? 'jpg' : m[2] };
 }
-function uploadPhoto_(b, me) {
+// Step 1 (outside the lock): check, save the image to Drive and share it
+function preparePhoto_(b) {
   var p = b.photo || {}, lid = idParam_(p.location_id);
   var loc = find_('locations', lid);
   if (!loc) throw err_(400, 'ไม่พบจุดช่วยเหลือ');
@@ -522,13 +532,29 @@ function uploadPhoto_(b, me) {
   var file = folder.createFile(Utilities.newBlob(img.bytes, img.mime, 'loc' + loc.code + '_' + stage + '_' + Date.now() + '.' + img.ext));
   try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); }
   catch (x) { file.setTrashed(true); throw err_(500, 'Google Drive ไม่อนุญาตให้แชร์ภาพแบบ “ทุกคนที่มีลิงก์” — ให้ผู้ดูแล Google Workspace เปิดสิทธิ์นี้ หรือ deploy ด้วยบัญชี Gmail'); }
+  return { fileId: file.getId() };
+}
+function discardPhoto_(prep) { DriveApp.getFileById(prep.fileId).setTrashed(true); }
+// Step 2 (inside the lock): add the sheet row
+function uploadPhoto_(b, me, prep) {
+  if (!prep) prep = preparePhoto_(b);
+  var p = b.photo || {}, lid = idParam_(p.location_id);
+  delete _rows.locations; delete _rows.photos; // re-read under the lock
+  if (!find_('locations', lid)) throw err_(400, 'ไม่พบจุดช่วยเหลือ');
+  var stage = oneOf_(p.stage, STAGES, 'deliver');
+  var file = { getId: function () { return prep.fileId; } };
   var sort = rows_('photos').filter(function (x) { return x.location_id === lid; }).reduce(function (m, x) { return Math.max(m, x.sort_order || 0); }, -1) + 1;
   var id = insert_('photos', {
     location_id: lid, stage: stage, file_id: file.getId(), caption: str_(p.caption, 500), taken_date: date_(p.taken_date),
     width: int_(p.width), height: int_(p.height), sort_order: sort, uploaded_by: me.id, created_at: now_()
   });
   update_('locations', lid, { updated_at: now_() });
-  return { id: id, file_id: file.getId() };
+  return { id: id, file_id: file.getId(), location_id: lid };
+}
+function photoSlim_(r) {
+  delete _rows.photos; delete _rows.locations;
+  var ph = r && find_('photos', r.id), loc = r && find_('locations', r.location_id);
+  return { photos: ph ? strip_([ph], []) : [], locations: loc ? strip_([loc], []) : [] };
 }
 // Field staff may only edit or delete photos they uploaded themselves
 function ownPhoto_(me, pid) {

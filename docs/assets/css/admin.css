@@ -304,3 +304,14 @@ body.ws-mode .adm-main { max-width: none; padding-bottom: 16px; }
 .ws-sub { font-size: 14px; margin: 14px 0 8px; color: var(--text); }
 .ws-ph { grid-template-columns: repeat(2, 1fr) !important; }
 .ws-point .upload-opts { grid-template-columns: 1fr !important; }
+.up-list { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.up-list li { position: relative; display: grid; grid-template-columns: 40px 1fr auto; align-items: center; gap: 10px; padding: 6px 10px 6px 6px; border-radius: 12px; background: var(--sky-50); font-size: 12.5px; overflow: hidden; }
+.up-list img { width: 40px; height: 40px; border-radius: 9px; object-fit: cover; }
+.up-list .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.up-list .stt { color: var(--muted); white-space: nowrap; font-weight: 600; }
+.up-list .up-ok .stt { color: #1E7A3C; }
+.up-list .up-err { background: rgba(217, 59, 48, .07); }
+.up-list .up-err .stt { color: #B3261E; white-space: normal; max-width: 60%; text-align: right; }
+.up-list .up-wait { opacity: .6; }
+.up-list .up-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 35%; border-radius: 3px; background: var(--gold-grad, linear-gradient(90deg, #FFCF4D, #F5AE0A)); animation: upSlide 1.3s ease-in-out infinite; }
+@keyframes upSlide { from { transform: translateX(-100%); } to { transform: translateX(300%); } }

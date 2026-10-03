@@ -1019,24 +1019,36 @@ ${field ? `
       const gas = window.RH.backend === 'apps-script';
       // older Apps Script code can't order parallel answers: upload one at a time there
       const lanes = gas ? (((await call('/api/admin/meta').catch(() => ({}))).api_version || 1) >= 3 ? 3 : 1) : 3;
+      // One row per photo with its own status, so a slow Google answer never looks like a frozen upload
       let ok = 0, done = 0, next = 0;
-      const show = () => { prog.innerHTML = `<div class="row"><span>กำลังอัปโหลด ${Math.min(done + 1, files.length)}/${files.length} ภาพ…</span><span>${Math.round(done / files.length * 100)}%</span></div><div class="progress"><i class="go" style="--w:${Math.max(4, done / files.length * 100)}%"></i></div>`; };
-      show();
+      const rows = files.map(f => ({ name: f.name, url: URL.createObjectURL(f), st: 'wait', msg: 'รอคิว' }));
+      const paint = () => {
+        prog.innerHTML = `<div class="row"><span>อัปโหลดแล้ว ${done}/${files.length} ภาพ</span><span>${Math.round(done / files.length * 100)}%</span></div>
+          <div class="progress"><i class="go" style="--w:${Math.max(3, done / files.length * 100)}%"></i></div>
+          <ul class="up-list">${rows.map(r => `<li class="up-${r.st}"><img src="${r.url}" alt=""><span class="nm">${esc(r.name)}</span><span class="stt">${r.st === 'ok' ? '✓ ' : r.st === 'err' ? '✕ ' : ''}${esc(r.msg)}</span>${r.st === 'busy' ? '<i class="up-bar"></i>' : ''}</li>`).join('')}</ul>`;
+      };
+      paint();
       const worker = async () => {
         while (next < files.length) {
-          const file = files[next++];
+          const i = next++, file = files[i], r = rows[i];
           try {
-            const full = await resizeImage(file, gas ? 1600 : 1920, 0.82);
+            r.st = 'busy'; r.msg = 'กำลังย่อภาพ…'; paint();
+            // Apps Script: 1440 px is plenty (Drive serves resized copies) and uploads much faster
+            const full = await resizeImage(file, gas ? 1440 : 1920, gas ? 0.8 : 0.82);
             const th = gas ? null : await resizeImage(file, 640, 0.8);
+            r.msg = gas ? 'กำลังส่งขึ้น Google Drive…' : 'กำลังอัปโหลด…'; paint();
             await call('/api/admin/photos', { method: 'POST', body: { location_id: lid, ...meta, image: full.dataUrl, ...(th ? { thumb: th.dataUrl } : {}), width: full.width, height: full.height } });
-            ok++;
-          } catch (e) { toast(`${file.name}: ${e.message}`, 'error'); }
-          done++; show();
+            ok++; r.st = 'ok'; r.msg = 'เสร็จแล้ว';
+          } catch (e) { r.st = 'err'; r.msg = e.message || 'อัปโหลดไม่สำเร็จ'; }
+          done++; paint();
         }
       };
       await Promise.all(Array.from({ length: Math.min(lanes, files.length) }, worker));
-      prog.innerHTML = '';
-      if (ok) toast(`อัปโหลดสำเร็จ ${ok} ภาพ`, 'success');
+      rows.forEach(r => URL.revokeObjectURL(r.url));
+      const failed = rows.filter(r => r.st === 'err').length;
+      if (!failed) prog.innerHTML = '';
+      if (ok) toast(`อัปโหลดสำเร็จ ${ok} ภาพ${failed ? ` · ไม่สำเร็จ ${failed} ภาพ` : ''}`, failed ? 'warning' : 'success');
+      else if (failed) toast('อัปโหลดไม่สำเร็จ — ดูสาเหตุในรายการด้านล่าง', 'error');
       onDone && onDone();
     }
   }
