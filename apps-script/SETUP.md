@@ -46,6 +46,10 @@ apiUrl: 'https://script.google.com/macros/s/xxxxxxxx/exec',
 วางโค้ดใหม่ → บันทึก → **Deploy → จัดการการทำให้ใช้งานได้ (Manage deployments) → ✏️ แก้ไข → เวอร์ชัน: ใหม่ → Deploy**
 (URL เดิมใช้ต่อได้ ไม่ต้องแก้ config.js)
 
+## ลืมรหัสผ่าน admin
+
+เปิด Apps Script → เลือกฟังก์ชัน **resetAdminPassword** → ▶ Run → รหัสใหม่อยู่ใน Execution log (ไม่ต้อง Deploy ใหม่)
+
 ## ข้อควรรู้
 
 - **บัญชีองค์กร (Google Workspace):** ถ้าโดเมนปิดการแชร์ไฟล์แบบ “ทุกคนที่มีลิงก์” ภาพจะอัปโหลดไม่ได้ (ระบบจะแจ้งเตือน)

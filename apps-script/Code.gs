@@ -74,6 +74,20 @@ function setup() {
   Logger.log('Setup complete. Photos folder id: ' + props.getProperty('FOLDER_ID'));
 }
 
+// Lost the admin password? Run this from the Apps Script editor (only the sheet owner can):
+// it gives the "admin" account a new password, prints it in the Execution log and signs out its old sessions.
+function resetAdminPassword() {
+  var pw = Utilities.getUuid().replace(/-/g, '').slice(0, 14), salt = Utilities.getUuid();
+  var a = rows_('admins').filter(function (x) { return x.username === 'admin'; })[0];
+  if (a) {
+    update_('admins', a.id, { salt: salt, password_hash: hash_(pw, salt), role: 'super' });
+    dropSessions_(a.id, null);
+  } else {
+    insert_('admins', { username: 'admin', password_hash: hash_(pw, salt), salt: salt, display_name: 'ทีมรัตนไพบูลย์', role: 'super', created_at: now_() });
+  }
+  Logger.log('admin → username: admin · new password: ' + pw + '  (change it after signing in)');
+}
+
 // ───────────────────────── web entry points ─────────────────────────
 function doGet(e) {
   try {
