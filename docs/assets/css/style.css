@@ -195,6 +195,14 @@ input, select, textarea { font: inherit; font-size: 16px; color: inherit; }
 .hero-media { position: absolute; inset: -6% 0 0; z-index: -2; }
 .hero-media img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 100%; animation: kenburns 26s ease-in-out infinite alternate; }
 @keyframes kenburns { from { transform: scale(1.04); } to { transform: scale(1.12) translate(-1.5%, -1%); } }
+/* Parallax: the photo drifts slower than the page. Where the browser supports scroll-driven animations it runs
+   on the compositor (no JS, stays smooth on phones); app.js falls back to a rAF transform elsewhere. */
+@media (prefers-reduced-motion: no-preference) {
+  @supports (animation-timeline: scroll()) {
+    .hero-media { animation: heroParallax linear both; animation-timeline: scroll(root block); animation-range: 0px 900px; will-change: transform; }
+    @keyframes heroParallax { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(0, 288px, 0); } }
+  }
+}
 .hero-shade { position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgba(243, 249, 255, .55) 0%, rgba(243, 249, 255, .10) 42%, rgba(11, 20, 70, 0) 62%, rgba(11, 20, 70, .35) 100%); }
 .hero-inner { width: 100%; padding-top: 18px; padding-bottom: 120px; display: grid; gap: 28px; align-items: center; }
 .hero-card { border-radius: var(--r-lg); padding: 22px 20px; max-width: 600px; }

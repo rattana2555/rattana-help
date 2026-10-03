@@ -191,12 +191,13 @@
       </section>`;
     countUp(view);
 
-    // Hero parallax (photo drifts slower than the page) — desktop pointers only; on phones it makes scrolling stutter
+    // Hero parallax (photo drifts slower than the page). CSS scroll-driven animation handles it where supported;
+    // otherwise move the photo layer once per frame (still a compositor-only transform, so phones stay smooth).
     const media = document.getElementById('heroMedia');
-    if (!reduceMotion() && window.matchMedia('(hover: hover) and (pointer: fine) and (min-width: 900px)').matches) {
+    if (!reduceMotion() && !(window.CSS && CSS.supports('animation-timeline: scroll()'))) {
       media.style.willChange = 'transform';
-      let raf = 0;
-      const onScroll = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { const y = Math.min(window.scrollY, 900); media.style.transform = `translate3d(0, ${y * 0.32}px, 0)`; }); };
+      let raf = 0, last = -1;
+      const onScroll = () => { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; const y = Math.round(Math.min(window.scrollY, 900) * 0.32); if (y === last) return; last = y; media.style.transform = `translate3d(0, ${y}px, 0)`; }); };
       window.addEventListener('scroll', onScroll, { passive: true });
       onCleanup(() => window.removeEventListener('scroll', onScroll));
     }
