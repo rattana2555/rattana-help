@@ -1,6 +1,7 @@
 // RATTANA HELP — public site (hash-routed SPA)
 (function () {
   'use strict';
+  const { ShareCard } = window.RH;
   const { api, esc, fmtNum, fmtDate, fmtDateRange, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, locTitle, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG } = window.RH;
   let view = document.getElementById('view');
   let cleanups = [];
@@ -385,6 +386,7 @@
       body.querySelectorAll('[data-ph]').forEach(b => b.onclick = () => Lightbox.open(photos, Number(b.dataset.ph)));
       const btn = body.querySelector('.js-photos');
       if (btn) btn.onclick = () => Lightbox.open(photos, 0);
+      body.querySelector('.js-share').onclick = () => ShareCard.open(ShareCard.fromLocation(d));
     }
 
     document.getElementById('sheetHandle').addEventListener('click', () => {
@@ -423,7 +425,7 @@
     const extra = photos.length - shown.length;
     return `
       <button type="button" class="dcard-back">${icon('back')} กลับไปที่รายการ</button>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">${statusChip(d.status, true)}${catChip(d.project_category)}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${statusChip(d.status, true)}${catChip(d.project_category)}<span style="flex:1"></span>${ShareCard.button('on-light js-share')}</div>
       <h2 class="dcard-title" style="margin-top:8px">${locTitle(d)}</h2>
       <p class="dcard-name">${esc(d.name)} · รอบที่ ${esc(d.round_no)}</p>
       ${shown.length ? `<div class="dcard-photos n${shown.length}">${shown.map((p, i) => `
@@ -478,6 +480,7 @@
           <h1>${locTitle(d)}</h1>
           <p class="sub">${esc(d.name)}</p>
           <div class="row">${statusChip(d.status, true)}<span class="chip chip-round">รอบที่ ${esc(d.round_no)}</span>${catChip(d.project_category)}</div>
+          <div class="row">${ShareCard.button('js-share')}</div>
         </div>
       </section>
 
@@ -559,6 +562,7 @@
       if (t && view.contains(t)) Lightbox.open(photos, Number(t.dataset.ph));
     });
     view.querySelector('.js-all')?.addEventListener('click', () => Lightbox.open(orderForDelivery(photos), 0));
+    view.querySelector('.js-share').addEventListener('click', () => ShareCard.open(ShareCard.fromLocation(d)));
 
     if (d.lat != null) {
       const touch = window.matchMedia('(pointer: coarse)').matches;
@@ -622,6 +626,7 @@
           <span>${icon('calendar')}${fmtDateRange(p.start_date || p.first_date, p.end_date || p.last_date)}</span>
           ${p.provinces ? `<span>${icon('pin')}พื้นที่จังหวัด${esc(p.provinces)}</span>` : ''}
         </div>
+        <div style="margin-top:16px">${ShareCard.button('js-share')}</div>
       </div></section>
       <div class="container" style="padding-top:20px;padding-bottom:48px">
         <div class="stat-grid">
@@ -664,6 +669,7 @@
         </section>` : ''}
       </div>`;
     view.querySelectorAll('[data-ph]').forEach(b => b.onclick = () => Lightbox.open(p.photos, Number(b.dataset.ph)));
+    view.querySelector('.js-share').addEventListener('click', () => ShareCard.open(ShareCard.fromProject(p)));
     const mm = makeMap(document.getElementById('projMap'), { scrollWheelZoom: false, dragging: !window.matchMedia('(pointer: coarse)').matches, tap: false });
     onCleanup(() => mm.remove());
     const pts = [];

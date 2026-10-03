@@ -770,3 +770,48 @@ body.is-map .line-fab, body.no-scroll .line-fab { display: none; }
   .hero-badges-m .m2 { right: -12px; left: auto; top: 136px; bottom: auto; animation-delay: -3s; }
   .hero-badges-m .m2 .bi { background: var(--gold-grad); color: var(--indigo-950); }
 }
+
+/* ── Share card sheet (IG / Facebook story & post images) ── */
+.btn-share { display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: 999px; font-size: 14px; font-weight: 700; color: var(--indigo-900); background: linear-gradient(135deg, #FFE08A, var(--gold)); border: 1px solid rgba(255, 255, 255, .7); box-shadow: 0 10px 24px -10px rgba(245, 174, 10, .9), inset 0 1px 0 rgba(255, 255, 255, .7); transition: transform .35s var(--ease-spring), box-shadow .25s; }
+.btn-share .ic { width: 17px; height: 17px; }
+.btn-share:hover { transform: translateY(-2px); box-shadow: 0 14px 28px -10px rgba(245, 174, 10, 1), inset 0 1px 0 rgba(255, 255, 255, .7); }
+.btn-share.on-light { box-shadow: 0 8px 18px -10px rgba(245, 174, 10, .9), inset 0 1px 0 rgba(255, 255, 255, .7); }
+.shr { position: fixed; inset: 0; z-index: 1300; display: flex; align-items: flex-end; justify-content: center; background: rgba(8, 14, 52, .55); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); opacity: 0; transition: opacity .22s; }
+.shr.is-open { opacity: 1; }
+.shr-panel { width: 100%; max-height: 94dvh; display: flex; flex-direction: column; gap: 12px; padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); background: var(--surface, #fff); border-radius: 28px 28px 0 0; box-shadow: 0 -20px 60px -20px rgba(8, 14, 52, .6); transform: translateY(40px); transition: transform .35s var(--ease-spring); overflow: hidden; }
+.shr.is-open .shr-panel { transform: none; }
+.shr-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.shr-head b { display: block; font-size: 18px; font-weight: 800; color: var(--indigo-900); }
+.shr-head small { color: var(--muted); font-size: 13px; }
+.shr-x { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--sky-50, #F1F8FF); color: var(--indigo-900); flex-shrink: 0; }
+.shr-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.shr-tabs button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 16px; border: 1.5px solid var(--line, #E3ECF7); background: #fff; color: var(--muted); font-size: 12px; font-weight: 700; line-height: 1.25; text-align: center; transition: all .25s var(--ease-spring); }
+.shr-tabs button .ic { width: 20px; height: 20px; }
+.shr-tabs button small { font-size: 10.5px; font-weight: 500; opacity: .75; font-variant-numeric: tabular-nums; }
+.shr-tabs button[aria-selected="true"] { color: #fff; border-color: transparent; transform: translateY(-1px); }
+.shr-tabs .app-ig[aria-selected="true"] { background: linear-gradient(135deg, #7B3FE4 0%, #E1306C 55%, #FCAF45 100%); box-shadow: 0 10px 20px -10px rgba(225, 48, 108, .8); }
+.shr-tabs .app-fb[aria-selected="true"] { background: linear-gradient(135deg, #2D88FF, #1565D8); box-shadow: 0 10px 20px -10px rgba(21, 101, 216, .8); }
+.shr-stage { flex: 1 1 auto; min-height: 0; display: flex; justify-content: center; align-items: center; padding: 6px 0; background: radial-gradient(circle at 50% 40%, var(--sky-100, #E2F1FF), transparent 70%); border-radius: 20px; }
+.shr-frame { --fh: min(52dvh, 560px); position: relative; width: min(100%, calc(var(--fh) * var(--ar, .5625))); aspect-ratio: 9 / 16; border-radius: 18px; overflow: hidden; background: linear-gradient(160deg, #1C2E86, #132063); box-shadow: 0 24px 50px -20px rgba(8, 14, 52, .7); transition: aspect-ratio .3s; }
+.shr-frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.shr-busy { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #fff; font-size: 13px; font-weight: 600; background: rgba(19, 32, 99, .55); }
+.shr-frame.is-busy .shr-busy { display: flex; }
+.shr-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.shr-acts .shr-go { grid-column: 1 / -1; justify-content: center; min-height: 50px; font-size: 15.5px; }
+.shr-acts .shr-go .ic { width: 20px; height: 20px; }
+.shr-acts .btn { justify-content: center; }
+.shr-acts .shr-save[hidden] + .shr-copy { grid-column: 1 / -1; }
+.shr-hint { font-size: 12.5px; color: var(--muted); text-align: center; line-height: 1.5; }
+@media (min-width: 900px) {
+  .shr { align-items: center; padding: 24px; }
+  .shr-panel { max-width: 980px; border-radius: 30px; display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: auto auto 1fr auto; column-gap: 24px; padding: 22px 24px; }
+  .shr-head { grid-column: 2; grid-row: 1; }
+  .shr-stage { grid-column: 1; grid-row: 1 / span 4; padding: 18px; }
+  .shr-frame { --fh: min(76dvh, 600px); }
+  .shr-tabs { grid-column: 2; grid-row: 2; grid-template-columns: 1fr 1fr; }
+  .shr-tabs button { flex-direction: row; justify-content: flex-start; gap: 8px; padding: 10px 12px; flex-wrap: wrap; text-align: left; }
+  .shr-tabs button small { width: 100%; padding-left: 28px; margin-top: -2px; }
+  .shr-acts { grid-column: 2; grid-row: 3; align-self: end; }
+  .shr-hint { grid-column: 2; grid-row: 4; }
+}
+.dcard .btn-share { padding: 7px 12px; font-size: 13px; }
