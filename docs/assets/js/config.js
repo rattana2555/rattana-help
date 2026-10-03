@@ -3,7 +3,7 @@ window.RH_CONFIG = {
   version: '2.2',
   // Google Apps Script web app URL (…/exec) — the data backend when hosted on GitHub Pages.
   // See apps-script/SETUP.md. Leave empty only when running the Node server (npm start).
-  apiUrl: '',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbwMY9VNDGlHMZmz87_XaYful8BxJtzyvS0gSccHPlIhaj8tru1D0I8MI-mM0FFolBo5/exec',
   // 'CE' = ค.ศ. (03/10/2026) · 'BE' = พ.ศ. (03/10/2569)
   dateEra: 'BE',
   // Link to Rattanaphaiboon's own ordering / support channel (LINE OA, website, etc.).
