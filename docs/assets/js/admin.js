@@ -161,6 +161,7 @@
   $('#btnRefresh').onclick = async () => {
     const b = $('#btnRefresh'); b.disabled = true; b.style.transform = 'rotate(360deg)';
     resetGeoCache();
+    await api('/api/admin/reload', { method: 'POST' }).catch(() => {}); // Apps Script: re-read everything (Node server reads live anyway)
     await route();
     b.disabled = false; setTimeout(() => { b.style.transform = ''; }, 600);
     toast('อัปเดตเรียบร้อย ✓', 'success');

@@ -325,6 +325,8 @@
   });
   on('POST', '/api/admin/logout', async () => { await gasPost('logout').catch(() => {}); store.set(TOKEN_KEY, null); adm = null; return { ok: true }; });
   on('GET', '/api/admin/me', async () => (await adminData()).me);
+  // the admin 🔄 button: drop the cached dataset so the next read comes fresh from Google
+  on('POST', '/api/admin/reload', async () => { adm = null; await adminData(); return { ok: true }; });
 
   // admin reads
   on('GET', '/api/admin/dashboard', async () => {
