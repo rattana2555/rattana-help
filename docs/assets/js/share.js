@@ -144,7 +144,7 @@
   }
   // Drive photos come from lh3.googleusercontent.com (CORS-enabled); ask for a size of our own so a cached
   // non-CORS copy of the same URL can never taint the canvas
-  const shareSize = u => /googleusercontent\.com/.test(u) ? u.replace(/=w\d+(-h\d+)?$/, '') + '=w1400' : u;
+  const shareSize = u => /googleusercontent\.com/.test(u) ? u.replace(/=w\d+(-h\d+)?$/, '') + '=w1080' : u;
   async function fontsReady() {
     if (!document.fonts || !document.fonts.load) return;
     try { await Promise.all(['500', '600', '700', '800', '900'].flatMap(w => [document.fonts.load(`${w} 40px "Noto Sans Thai"`, 'กขค'), document.fonts.load(`${w} 40px Inter`, 'Aa1')])); } catch { /* fall back to system fonts */ }
