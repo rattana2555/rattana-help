@@ -888,8 +888,56 @@
   }
 
   // ─────────────── router ───────────────
+  // ─────────────── DONATIONS ───────────────
+  // data/donations.json is built every 10 min by the deploy workflow (scripts/donations.mjs) from the
+  // donation sheet: approved (slip-checked) donations only, names partly hidden, no phone numbers or slips
+  async function pageDonate(id) {
+    let d = null;
+    try { d = await fetch('data/donations.json', { cache: 'no-cache' }).then(r => (r.ok ? r.json() : null)); } catch { /* not built yet */ }
+    if (id !== renderId) return;
+    document.title = 'ผู้ร่วมบริจาค · RATTANA HELP';
+    const list = (d && d.donations) || [], pending = (d && d.pending) || { count: 0 };
+    const itemText = items => items.map(i => `${esc(i.name)} ${fmtNum(i.qty)} ${esc(String(i.unit || '').replace(/\s*(x\d.*|\(.*\))$/i, ''))}`).join(' · ');
+    const stat = (ic, v, unit, label) => `<div class="stat"><div class="stat-ic">${icon(ic)}</div><div class="stat-v"><span data-count="${Number(v) || 0}">0</span><small>${unit}</small></div><div class="stat-l">${label}</div></div>`;
+    view.innerHTML = `
+      <section class="page-head"><div class="container">
+        <span class="eyebrow">Donations</span>
+        <h1>ผู้ร่วมบริจาค</h1>
+        <p>ขอบคุณทุกน้ำใจที่ร่วมส่งต่อความช่วยเหลือ — แสดงเฉพาะรายการที่ตรวจสอบสลิปแล้ว และแสดงชื่อเพียงบางส่วนเพื่อความเป็นส่วนตัว</p>
+      </div></section>
+      <div class="container" style="padding:20px 16px 48px">
+        <div class="stat-grid">
+          ${stat('heart', d ? d.total_amount : 0, 'บาท', 'ยอดบริจาครวม')}
+          ${stat('users', d ? d.donor_count : 0, 'ราย', 'ผู้ร่วมบริจาค')}
+          ${stat('gift', d ? d.order_count : 0, 'ครั้ง', 'รายการบริจาค')}
+          ${stat('box', d ? d.items.reduce((s, i) => s + (i.qty || 0), 0) : 0, 'หน่วย', 'สิ่งของที่ร่วมบริจาค')}
+        </div>
+        ${pending.count ? `<p class="don-pending">${icon('calendar')}<span>รอตรวจสอบสลิปอีก <b>${fmtNum(pending.count)}</b> รายการ — จะแสดงในรายชื่อเมื่อทีมงานตรวจสอบแล้ว</span></p>` : ''}
+        <div class="don-grid">
+          <section class="card card-pad">
+            <h3 class="card-title">${icon('heart')} รายชื่อผู้ร่วมบริจาค</h3>
+            ${list.length ? `<ul class="don-list">${list.map(x => `
+              <li>
+                <span class="don-av">${esc(Array.from(x.name)[0] || '♥')}</span>
+                <div class="don-tx"><b>${esc(x.name)}</b><small>${itemText(x.items)}</small><small class="don-date">${fmtDate(x.date)}${x.time ? ` · ${esc(x.time)} น.` : ''}</small></div>
+                <span class="don-amt">${fmtNum(x.amount)}<small>บาท</small></span>
+              </li>`).join('')}</ul>`
+              : emptyState('ยังไม่มีรายการที่ตรวจสอบแล้ว', pending.count ? 'รายการบริจาคจะแสดงที่นี่เมื่อทีมงานตรวจสอบสลิปเรียบร้อย' : 'ร่วมเป็นคนแรกที่ส่งต่อความช่วยเหลือ', 'heart')}
+          </section>
+          <aside style="display:flex;flex-direction:column;gap:16px">
+            ${d && d.items.length ? `<section class="card card-pad"><h3 class="card-title">${icon('box')} สิ่งของที่ร่วมบริจาค</h3>
+              <table class="items-table"><tbody>${d.items.map(i => `<tr><td><span class="dot"></span>${esc(i.name)}</td><td class="q">${fmtNum(i.qty)}<small>${esc(String(i.unit || '').replace(/\s*(x\d.*|\(.*\))$/i, ''))}</small></td></tr>`).join('')}</tbody></table></section>` : ''}
+            ${supportCard('ร่วมบริจาคสิ่งของ')}
+          </aside>
+        </div>
+        <p class="don-note">ข้อมูลอัปเดตอัตโนมัติทุกประมาณ 10 นาที</p>
+      </div>`;
+    countUp(view);
+  }
+
   const ROUTES = [
     [/^\/?$/, pageHome, 'home'],
+    [/^\/donate$/, pageDonate, 'donate'],
     [/^\/map$/, pageMap, 'map'],
     [/^\/impact$/, pageImpact, 'impact'],
     [/^\/gallery$/, pageGallery, 'gallery'],

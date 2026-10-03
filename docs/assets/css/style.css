@@ -128,7 +128,7 @@ input, select, textarea { font: inherit; font-size: 16px; color: inherit; }
 /* ── Floating tab bar (mobile) ── */
 .bottomnav {
   position: fixed; left: 12px; right: 12px; bottom: calc(10px + var(--safe-b)); z-index: 1000;
-  height: var(--tabbar-h); border-radius: 33px; display: grid; grid-template-columns: repeat(5, 1fr);
+  height: var(--tabbar-h); border-radius: 33px; display: grid; grid-template-columns: repeat(var(--bn-n, 6), 1fr);
   background: rgba(255, 255, 255, .74); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
   border: 1px solid rgba(255, 255, 255, .9); box-shadow: var(--hi), 0 18px 40px -12px rgba(19, 32, 99, .35);
 }
@@ -830,3 +830,20 @@ body.is-map .line-fab, body.no-scroll .line-fab { display: none; }
   .shr-frame { --fh: min(46vh, 46dvh, 520px); flex-shrink: 0; }
   .shr-panel:has(.shr-pics:not([hidden])) .shr-frame { --fh: min(38vh, 38dvh, 440px); }
 }
+
+/* ── Donations page ── */
+.don-pending { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; padding: 10px 14px; border-radius: 14px; background: rgba(245, 174, 10, .12); color: #7A5200; font-size: 13.5px; }
+.don-pending .ic { width: 17px; height: 17px; flex-shrink: 0; }
+.don-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 18px; }
+@media (min-width: 900px) { .don-grid { grid-template-columns: 1.6fr 1fr; align-items: start; } }
+.don-list { list-style: none; display: flex; flex-direction: column; }
+.don-list li { display: grid; grid-template-columns: 42px 1fr auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+.don-list li:first-child { border-top: 0; padding-top: 4px; }
+.don-av { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; font-weight: 800; font-size: 17px; color: var(--indigo-900); background: linear-gradient(135deg, #FFE08A, var(--gold)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6); }
+.don-tx { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.don-tx b { font-size: 15px; color: var(--indigo-900); }
+.don-tx small { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.don-tx .don-date { font-size: 11.5px; color: var(--muted-2); }
+.don-amt { font-size: 17px; font-weight: 800; color: var(--indigo-900); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.don-amt small { font-size: 11.5px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+.don-note { text-align: center; color: var(--muted-2); font-size: 12px; margin-top: 18px; }

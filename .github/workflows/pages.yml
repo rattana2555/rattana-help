@@ -31,6 +31,8 @@ jobs:
         id: snap
         env:
           LIVE: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/snapshot.json
+          LIVE_DON: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/donations.json
+          DONATIONS_SHEET_ID: ${{ secrets.DONATIONS_SHEET_ID }}
         run: |
           mkdir -p docs/data
           API=$(grep -oE "https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec" docs/assets/js/config.js | head -1 || true)
@@ -52,6 +54,13 @@ jobs:
             echo "::warning::Apps Script did not answer — keeping the snapshot that is live now"
             curl -sfL "$LIVE" -o docs/data/snapshot.json || rm -f docs/data/snapshot.json
             changed=false
+          fi
+          # Donations page: approved donations only, names partly hidden, no phone numbers or slips (scripts/donations.mjs)
+          if node scripts/donations.mjs docs/data/donations.json && [ -f docs/data/donations.json ]; then
+            if ! (curl -sfL "$LIVE_DON" -o live_don.json && cmp -s live_don.json docs/data/donations.json); then changed=true; fi
+          else
+            echo "::warning::Donation sheet not read — keeping the donations list that is live now"
+            curl -sfL "$LIVE_DON" -o docs/data/donations.json || rm -f docs/data/donations.json
           fi
           if [ "${{ github.event_name }}" != "schedule" ]; then changed=true; fi
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
