@@ -3,7 +3,7 @@ window.RH_CONFIG = {
   version: '2.4',
   // Google Apps Script web app URL (…/exec) — the data backend when hosted on GitHub Pages.
   // See apps-script/SETUP.md. Leave empty only when running the Node server (npm start).
-  apiUrl: 'https://script.google.com/macros/s/AKfycbwMY9VNDGlHMZmz87_XaYful8BxJtzyvS0gSccHPlIhaj8tru1D0I8MI-mM0FFolBo5/exec',
+  apiUrl: 'https://script.google.com/macros/s/AKfycbzceWVULP-XEHgoKJjROCda8S9Ou1qsfjbKzNzM9kRysoUjkFdNlbs6JBwRjevXLj-7/exec',
   // 'CE' = ค.ศ. (03/10/2026) · 'BE' = พ.ศ. (03/10/2569)
   dateEra: 'BE',
   // Home page hero text (the site now covers every kind of relief project, not only floods)
