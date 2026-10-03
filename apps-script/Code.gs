@@ -20,9 +20,13 @@ var STATUSES = ['preparing', 'in_transit', 'delivered'];
 var STAGES = ['collect', 'prepare', 'transit', 'deliver', 'after'];
 var STEPS = ['support', 'collect', 'prepare', 'transit', 'deliver'];
 var ROLES = ['super', 'field'];
+// Project types (keep in sync with CATEGORIES in docs/assets/js/common.js)
+var CATEGORY_KEYS = ['flood', 'drought', 'fire', 'storm', 'cold', 'community', 'education', 'health', 'other'];
+var API_VERSION = 2;
 
 var TABLES = {
-  projects: ['id', 'round_no', 'name', 'summary', 'description', 'status', 'start_date', 'end_date', 'supporters', 'is_published', 'created_at', 'updated_at'],
+  // New columns are only ever appended at the end (ensureSchema_ adds them to existing sheets)
+  projects: ['id', 'round_no', 'name', 'summary', 'description', 'status', 'start_date', 'end_date', 'supporters', 'is_published', 'created_at', 'updated_at', 'category'],
   locations: ['id', 'project_id', 'code', 'name', 'province_id', 'district_id', 'subdistrict_id', 'village', 'lat', 'lng', 'delivery_date', 'status', 'description', 'beneficiaries', 'households', 'supporters', 'cover_photo_id', 'created_at', 'updated_at'],
   items: ['id', 'location_id', 'name', 'quantity', 'unit', 'sort_order'],
   photos: ['id', 'location_id', 'stage', 'file_id', 'caption', 'taken_date', 'width', 'height', 'sort_order', 'uploaded_by', 'created_at'],
@@ -44,6 +48,20 @@ var PROVINCES = {
 };
 
 // ───────────────────────── one-time setup ─────────────────────────
+// Adds columns introduced by newer versions of this file to sheets created earlier (runs once per version)
+function ensureSchema_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('SCHEMA') === String(API_VERSION)) return;
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  Object.keys(TABLES).forEach(function (name) {
+    var sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() === 0) return;
+    var head = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0].map(String);
+    TABLES[name].forEach(function (h) { if (head.indexOf(h) < 0) { head.push(h); sh.getRange(1, head.length).setValue(h); } });
+  });
+  props.setProperty('SCHEMA', String(API_VERSION));
+}
+
 function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   Object.keys(TABLES).forEach(function (name) {
@@ -70,6 +88,7 @@ function setup() {
     insert_('admins', { username: 'admin', password_hash: hash_(pw, salt), salt: salt, display_name: 'ทีมรัตนไพบูลย์', role: 'super', created_at: now_() });
     Logger.log('First admin → username: admin · password: ' + pw + '  (change it after signing in)');
   }
+  ensureSchema_();
   clearPublicCache_();
   Logger.log('Setup complete. Photos folder id: ' + props.getProperty('FOLDER_ID'));
 }
@@ -91,6 +110,7 @@ function resetAdminPassword() {
 // ───────────────────────── web entry points ─────────────────────────
 function doGet(e) {
   try {
+    ensureSchema_();
     var action = (e && e.parameter && e.parameter.action) || 'data';
     if (action === 'data') return out_({ ok: true, data: publicDataCached_() });
     if (action === 'ping') return out_({ ok: true, data: { time: now_() } });
@@ -100,6 +120,7 @@ function doGet(e) {
 
 function doPost(e) {
   try {
+    ensureSchema_();
     var body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     var def = ACTIONS[body.action];
     if (!def) throw err_(404, 'Not found');
@@ -299,6 +320,7 @@ function publicData_() {
     provinces: strip_(rows_('provinces'), []),
     districts: strip_(rows_('districts').filter(function (d) { return dIds.indexOf(d.id) >= 0; }), []),
     subdistricts: strip_(rows_('subdistricts').filter(function (s) { return sIds.indexOf(s.id) >= 0; }), []),
+    api_version: API_VERSION,
     generated_at: now_()
   };
 }
@@ -332,6 +354,7 @@ function adminData_(me) {
     districts: strip_(rows_('districts'), []),
     subdistricts: strip_(rows_('subdistricts'), []),
     people: people,
+    api_version: API_VERSION,
     admins: me && me.role === 'super' ? strip_(rows_('admins'), ['password_hash', 'salt']) : []
   };
 }
@@ -343,7 +366,7 @@ function saveProject_(b) {
     round_no: reqStr_(p.round_no, 'รอบที่', 20), name: reqStr_(p.name, 'ชื่อโครงการ', 200), summary: str_(p.summary, 500),
     description: str_(p.description, 5000), status: oneOf_(p.status, STATUSES, 'preparing'), start_date: date_(p.start_date),
     end_date: date_(p.end_date), supporters: str_(p.supporters, 1000), is_published: p.is_published === false || p.is_published === 0 ? 0 : 1,
-    updated_at: now_()
+    category: oneOf_(p.category, CATEGORY_KEYS, 'flood'), updated_at: now_()
   };
   if (b.id) {
     if (!update_('projects', idParam_(b.id), v)) throw err_(404, 'ไม่พบโครงการ');
@@ -378,7 +401,8 @@ function saveLocation_(b) {
   var l = b.location || {}, id = b.id ? idParam_(b.id) : null;
   var projectId = idParam_(l.project_id);
   if (!find_('projects', projectId)) throw err_(400, 'ไม่พบโครงการที่เลือก');
-  var provinceId = int_(l.province_id), districtId = int_(l.district_id), subdistrictId = int_(l.subdistrict_id);
+  var area = resolveArea_(l);
+  var provinceId = area.province_id, districtId = area.district_id, subdistrictId = area.subdistrict_id;
   var dist = districtId && find_('districts', districtId), sub = subdistrictId && find_('subdistricts', subdistrictId);
   if (districtId && (!dist || dist.province_id !== provinceId)) throw err_(400, 'อำเภอไม่ตรงกับจังหวัด');
   if (subdistrictId && (!sub || sub.district_id !== districtId)) throw err_(400, 'ตำบลไม่ตรงกับอำเภอ');
@@ -403,6 +427,29 @@ function saveLocation_(b) {
   if (Array.isArray(l.updates)) saveUpdates_(id, l.updates);
   return { id: id };
 }
+// Points added on the map arrive with area names (from reverse geocoding) instead of ids:
+// match the province, then find or create the district and subdistrict under it.
+function areaName_(v) { return str_(String(v || '').replace(/^(จังหวัด|อำเภอ|เขต|ตำบล|แขวง)\s*/, ''), 100); }
+function resolveArea_(l) {
+  var p = int_(l.province_id), d = int_(l.district_id), s = int_(l.subdistrict_id), a = l.area_names || {};
+  if (!p && a.province) {
+    var pn = areaName_(a.province);
+    var pv = rows_('provinces').filter(function (x) { return x.name_th === pn; })[0];
+    if (pv) p = pv.id;
+  }
+  if (p && !d && a.district) {
+    var dn = areaName_(a.district);
+    var dr = dn && rows_('districts').filter(function (x) { return x.province_id === p && x.name_th === dn; })[0];
+    d = dr ? dr.id : (dn ? insert_('districts', { province_id: p, name_th: dn }) : null);
+  }
+  if (d && !s && a.subdistrict) {
+    var sn = areaName_(a.subdistrict);
+    var sr = sn && rows_('subdistricts').filter(function (x) { return x.district_id === d && x.name_th === sn; })[0];
+    s = sr ? sr.id : (sn ? insert_('subdistricts', { district_id: d, name_th: sn }) : null);
+  }
+  return { province_id: p || null, district_id: d || null, subdistrict_id: s || null };
+}
+
 function removeLocation_(lid) {
   deleteWhere_('photos', function (p) { return p.location_id === lid; }).forEach(trashFile_);
   deleteWhere_('items', function (i) { return i.location_id === lid; });

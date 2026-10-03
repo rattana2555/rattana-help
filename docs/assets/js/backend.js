@@ -90,10 +90,11 @@
 
   function build(d, isAdmin) {
     const db = {
-      isAdmin, me: d.me || null,
+      isAdmin, me: d.me || null, api_version: d.api_version || 1,
       projects: d.projects || [], locations: d.locations || [], items: d.items || [], photos: d.photos || [], updates: d.updates || [],
       provinces: d.provinces || [], districts: d.districts || [], subdistricts: d.subdistricts || [], admins: d.admins || [],
     };
+    db.projects.forEach(p => { if (!p.category) p.category = 'flood'; });
     const P = byKey(db.projects), PV = byKey(db.provinces), D = byKey(db.districts), S = byKey(db.subdistricts);
     const people = new Map((d.people || []).map(x => [x.id, x.name]));
     const L = byKey(db.locations);
@@ -101,7 +102,7 @@
       const l = L.get(p.location_id) || {}, pr = P.get(l.project_id) || {};
       Object.assign(p, {
         file_path: p.file_path || photoUrl(p, 1920), thumb_path: p.thumb_path || photoUrl(p, 640),
-        location_code: l.code, location_name: l.name, project_id: l.project_id, round_no: pr.round_no, project_name: pr.name,
+        location_code: l.code, location_name: l.name, project_id: l.project_id, round_no: pr.round_no, project_name: pr.name, project_category: pr.category || 'flood',
         province: PV.get(l.province_id)?.name_th || null, district: D.get(l.district_id)?.name_th || null, subdistrict: S.get(l.subdistrict_id)?.name_th || null,
         province_id: l.province_id, district_id: l.district_id, subdistrict_id: l.subdistrict_id, _delivery: l.delivery_date,
         uploader_name: isAdmin ? (people.get(p.uploaded_by) || null) : undefined,
@@ -117,7 +118,7 @@
       const fallback = [...ph].sort((a, b) => ((b.stage === 'deliver') - (a.stage === 'deliver')) || ((a.sort_order || 0) - (b.sort_order || 0)) || (a.id - b.id))[0];
       const cover = ph.find(p => p.id === l.cover_photo_id) || fallback;
       Object.assign(l, {
-        round_no: pr.round_no, project_name: pr.name, project_status: pr.status,
+        round_no: pr.round_no, project_name: pr.name, project_status: pr.status, project_category: pr.category || 'flood',
         province: PV.get(l.province_id)?.name_th || null, district: D.get(l.district_id)?.name_th || null, subdistrict: S.get(l.subdistrict_id)?.name_th || null,
         cover_thumb: cover ? cover.thumb_path : null, cover_url: cover ? cover.file_path : null,
         photo_count: ph.length, items_total: (itemsBy.get(l.id) || []).reduce((s, i) => s + (i.quantity || 0), 0),
@@ -187,11 +188,11 @@
 
   function photoQuery(db, q) {
     const n = k => Number(q.get(k)) || 0;
-    const from = q.get('date_from'), to = q.get('date_to'), stage = q.get('stage');
+    const from = q.get('date_from'), to = q.get('date_to'), stage = q.get('stage'), cat = q.get('category');
     const list = db.photos.filter(p =>
       (!n('province_id') || p.province_id === n('province_id')) && (!n('district_id') || p.district_id === n('district_id')) &&
       (!n('subdistrict_id') || p.subdistrict_id === n('subdistrict_id')) && (!n('project_id') || p.project_id === n('project_id')) &&
-      (!n('location_id') || p.location_id === n('location_id')) && (!stage || p.stage === stage) &&
+      (!n('location_id') || p.location_id === n('location_id')) && (!stage || p.stage === stage) && (!cat || p.project_category === cat) &&
       (!from || (p.taken_date || p._delivery || '') >= from) && (!to || (p.taken_date || p._delivery || '') <= to))
       .sort((a, b) => desc(a.taken_date || a._delivery, b.taken_date || b._delivery) || (b.location_id - a.location_id) || ((a.sort_order || 0) - (b.sort_order || 0)) || (a.id - b.id));
     const limit = Math.min(Math.max(n('limit') || 30, 1), 200), offset = Math.max(n('offset'), 0);
@@ -213,8 +214,16 @@
       const r = byItem.get(k) || { name: i.name, unit: i.unit, quantity: 0, _locs: new Set() };
       r.quantity += i.quantity || 0; r._locs.add(i.location_id); byItem.set(k, r);
     });
+    const byCat = new Map();
+    db.projects.forEach(p => {
+      const r = byCat.get(p.category) || { category: p.category, projects: 0, delivered: 0, beneficiaries: 0 };
+      r.projects++;
+      db.locations.filter(l => l.project_id === p.id && l.status === 'delivered').forEach(l => { r.delivered++; r.beneficiaries += l.beneficiaries || 0; });
+      byCat.set(p.category, r);
+    });
     return {
       stats: stats(db),
+      byCategory: [...byCat.values()].sort((a, b) => b.beneficiaries - a.beneficiaries || b.projects - a.projects),
       byProvince: [...byProv.values()].sort((a, b) => b.beneficiaries - a.beneficiaries),
       byItem: [...byItem.values()].map(r => ({ name: r.name, unit: r.unit, quantity: r.quantity, locations: r._locs.size })).sort((a, b) => b.quantity - a.quantity).slice(0, 12),
       projects: projectAggregates(db),
@@ -229,6 +238,7 @@
     return {
       provinces: uniq(locs, 'province_id').map(l => ({ id: l.province_id, name: l.province })).sort((a, b) => a.name.localeCompare(b.name, 'th')),
       districts: uniq(locs, 'district_id').map(l => ({ id: l.district_id, name: l.district, province_id: l.province_id })).sort((a, b) => a.name.localeCompare(b.name, 'th')),
+      categories: [...new Set(locs.map(l => l.project_category).filter(Boolean))],
       projects: uniq(locs, 'project_id').map(l => ({ id: l.project_id, round_no: l.round_no, name: l.project_name })).sort((a, b) => desc(a.round_no, b.round_no)),
     };
   }
@@ -287,6 +297,7 @@
   on('GET', '/api/admin/locations/(\\d+)', async ([id]) => locationDetail(await adminData(), +id));
   on('GET', '/api/admin/photos', async (_, q) => photoQuery(await adminData(), q));
   on('GET', '/api/admin/admins', async () => clone((await adminData()).admins));
+  on('GET', '/api/admin/meta', async () => ({ backend: 'apps-script', api_version: (await adminData()).api_version }));
 
   // admin writes (Apps Script checks login + role for every one)
   on('POST', '/api/admin/projects', async (_, __, b) => write('saveProject', { project: b }));

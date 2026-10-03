@@ -1,7 +1,7 @@
 // RATTANA HELP — Admin dashboard
 (function () {
   'use strict';
-  const { api, esc, fmtNum, fmtDate, areaText, STATUS, STAGES, STEPS, statusChip, icon, SearchSelect, Lightbox, makeMap, pinIcon, toast, todayISO, CFG } = window.RH;
+  const { api, esc, fmtNum, fmtDate, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, icon, SearchSelect, Lightbox, makeMap, pinIcon, setPinSelected, toast, todayISO, CFG } = window.RH;
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   let main = $('#adm');
@@ -182,7 +182,7 @@
     $$('.adm-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
     const fresh = main.cloneNode(false); main.replaceWith(fresh); main = fresh;
     main.innerHTML = '<div class="loading" style="min-height:40vh"><div class="spinner"></div></div>';
-    const pages = { overview: pageOverview, projects: pageProjects, locations: parts[1] ? pageLocationEditor : pageLocations, photos: pagePhotos, areas: pageAreas, admins: pageAdmins };
+    const pages = { overview: pageOverview, projects: parts[1] ? pageProjectWorkspace : pageProjects, locations: parts[1] ? pageLocationEditor : pageLocations, photos: pagePhotos, areas: pageAreas, admins: pageAdmins };
     try { await (pages[tabName] || pageOverview)(id, parts); }
     catch (e) { if (id === renderId && e.status !== 401) { main.innerHTML = `<div class="empty">${icon('close')}<h3>โหลดข้อมูลไม่สำเร็จ</h3><p>${esc(e.message)}</p></div>`; } }
   }
@@ -214,7 +214,7 @@
         <div class="astat" style="border-top-color:var(--navy-3)"><div class="l">ภาพถ่ายทั้งหมด</div><div class="v">${fmtNum(s.photos)}</div><div class="s">ภาพ</div></div>
       </div>
       <section class="acard"><div class="acard-head"><h2>${icon('calendar')} แก้ไขล่าสุด</h2><a class="link-more" href="#locations">ดูทั้งหมด ${icon('arrow')}</a></div><div id="recentTbl"></div></section>`;
-    $('#qNewProj')?.addEventListener('click', () => editProject(null).then(ok => ok && route()));
+    $('#qNewProj')?.addEventListener('click', createProject);
     table($('#recentTbl'), {
       rows: d.recent, sort: { key: 'updated_at', dir: 'desc' },
       cols: [
@@ -230,15 +230,26 @@
   }
 
   // ─────────────── PROJECTS ───────────────
+  // Apps Script deployed before v2.3 doesn't store project types yet → remind the admin to update it
+  async function backendNotice() {
+    try {
+      const m = await api('/api/admin/meta');
+      if (m && m.backend === 'apps-script' && (m.api_version || 1) < 2) return `<div class="acard" style="border-top-color:#D93B30"><div class="acard-body" style="display:flex;gap:12px;align-items:flex-start">
+        <span style="font-size:22px">⚠️</span><div><b>โค้ด Apps Script ยังเป็นเวอร์ชันเก่า</b><p style="color:var(--muted);font-size:13.5px">ประเภทโครงการจะยังไม่ถูกบันทึก — วางโค้ด <code>apps-script/Code.gs</code> ล่าสุด แล้ว Deploy → Manage deployments → แก้ไข → เวอร์ชันใหม่ (ดู SETUP.md)</p></div></div></div>`;
+    } catch { /* Node server: nothing to update */ }
+    return '';
+  }
+
   async function editProject(p) {
-    const v = p || { status: 'preparing', is_published: 1 };
-    let status = v.status;
+    const v = p || { status: 'preparing', is_published: 1, category: 'flood' };
+    let status = v.status, cat = v.category || 'flood';
     return modal({
       title: p ? `แก้ไขโครงการ รอบที่ ${p.round_no}` : 'เพิ่มโครงการใหม่',
       body: `<div class="form-grid">
+        <div class="field span-2"><span>ประเภทโครงการ</span><div class="cat-pick" id="pCat">${Object.entries(CATEGORIES).map(([k, c]) => `<button type="button" data-c="${k}" class="${k === cat ? 'on' : ''}"><span class="ic">${c.icon}</span>${esc(c.label)}</button>`).join('')}</div></div>
         <label class="field"><span>รอบที่ <span class="req">*</span></span><input class="input" name="round_no" value="${esc(v.round_no || '')}" placeholder="เช่น 004" maxlength="20" required></label>
         <div class="field"><span>สถานะ</span><div class="seg-ctl" id="pStatus">${STATUS_KEYS.map(k => `<button type="button" data-v="${k}" class="${k === status ? 'on' : ''}">${STATUS[k].label}</button>`).join('')}</div></div>
-        <label class="field span-2"><span>ชื่อโครงการ <span class="req">*</span></span><input class="input" name="name" value="${esc(v.name || '')}" maxlength="200" required></label>
+        <label class="field span-2"><span>ชื่อโครงการ <span class="req">*</span></span><input class="input" name="name" value="${esc(v.name || '')}" maxlength="200" placeholder="เช่น ส่งต่อน้ำใจ สู้ภัยแล้ง จังหวัด..." required></label>
         <label class="field span-2"><span>สรุปสั้น <span class="hint">(แสดงบนการ์ด)</span></span><input class="input" name="summary" value="${esc(v.summary || '')}" maxlength="500"></label>
         <label class="field span-2"><span>รายละเอียด</span><textarea class="input" name="description" maxlength="5000">${esc(v.description || '')}</textarea></label>
         <label class="field"><span>วันที่เริ่ม</span><input class="input" type="date" name="start_date" value="${esc(v.start_date || '')}"></label>
@@ -246,50 +257,333 @@
         <label class="field span-2"><span>ผู้ร่วมสนับสนุน <span class="hint">(ถ้ามี)</span></span><input class="input" name="supporters" value="${esc(v.supporters || '')}" maxlength="1000"></label>
         <label class="switch span-2"><input type="checkbox" name="is_published"${v.is_published ? ' checked' : ''}> เผยแพร่บนเว็บไซต์</label>
       </div>`,
-      onOpen: b => $('#pStatus', b).onclick = e => { const t = e.target.closest('[data-v]'); if (!t) return; status = t.dataset.v; $$('#pStatus button', b).forEach(x => x.classList.toggle('on', x === t)); },
+      submit: p ? 'บันทึก' : 'สร้างและเปิดแผนที่',
+      onOpen: b => {
+        $('#pStatus', b).onclick = e => { const t = e.target.closest('[data-v]'); if (!t) return; status = t.dataset.v; $$('#pStatus button', b).forEach(x => x.classList.toggle('on', x === t)); };
+        $('#pCat', b).onclick = e => { const t = e.target.closest('[data-c]'); if (!t) return; cat = t.dataset.c; $$('#pCat button', b).forEach(x => x.classList.toggle('on', x === t)); };
+      },
       onSubmit: async f => {
-        const body = { round_no: f.round_no.value, name: f.name.value, summary: f.summary.value, description: f.description.value, status, start_date: f.start_date.value, end_date: f.end_date.value, supporters: f.supporters.value, is_published: f.is_published.checked };
+        const body = { category: cat, round_no: f.round_no.value, name: f.name.value, summary: f.summary.value, description: f.description.value, status, start_date: f.start_date.value, end_date: f.end_date.value, supporters: f.supporters.value, is_published: f.is_published.checked };
         if (!body.round_no.trim() || !body.name.trim()) { toast('กรุณาระบุรอบที่และชื่อโครงการ', 'warning'); return false; }
-        if (p) await call(`/api/admin/projects/${p.id}`, { method: 'PUT', body });
-        else await call('/api/admin/projects', { method: 'POST', body });
+        const r = p ? await call(`/api/admin/projects/${p.id}`, { method: 'PUT', body }) : await call('/api/admin/projects', { method: 'POST', body });
         toast('บันทึกโครงการแล้ว', 'success');
-        return true;
+        return { id: p ? p.id : r.id, created: !p };
       },
     });
   }
+  // New project → straight into its map
+  async function createProject() {
+    const r = await editProject(null);
+    if (r && r.id) location.hash = `projects/${r.id}`;
+  }
 
   async function pageProjects(id) {
-    const rows = await call('/api/admin/projects');
+    const [rows, notice] = await Promise.all([call('/api/admin/projects'), backendNotice()]);
     if (id !== renderId) return;
+    let q = '', cat = '';
     main.innerHTML = `
-      <div class="page-title"><div><h1>โครงการ / รอบการช่วยเหลือ</h1><p>${rows.length} โครงการ</p></div><button class="btn btn-gold" id="newProj">${icon('plus')} เพิ่มโครงการ</button></div>
-      <section class="acard"><div class="toolbar" style="grid-template-columns:1fr"><div class="search-input">${icon('search')}<input class="input" id="q" placeholder="ค้นหารอบ / ชื่อโครงการ / จังหวัด"></div></div><div id="tbl"></div></section>`;
-    const t = table($('#tbl'), {
-      rows, sort: { key: 'start_date', dir: 'desc' }, empty: 'ยังไม่มีโครงการ — กด “เพิ่มโครงการ” เพื่อเริ่มต้น',
-      cols: [
-        { key: 'round_no', label: 'รอบที่', cls: 'code' },
-        { key: 'name', label: 'ชื่อโครงการ', render: r => `<b>${esc(r.name)}</b><span class="sub">${esc(r.provinces || 'ยังไม่มีจุดช่วยเหลือ')}</span>` },
-        { key: 'status', label: 'สถานะ', render: r => statusChip(r.status) },
-        { key: 'start_date', label: 'วันที่เริ่ม', type: 'date', render: r => fmtDate(r.start_date) },
-        { key: 'location_count', label: 'จุด (ส่งแล้ว/ทั้งหมด)', type: 'num', cls: 'num', render: r => `${r.delivered_count}/${r.location_count}` },
-        { key: 'beneficiaries', label: 'ผู้ได้รับ', type: 'num', cls: 'num', render: r => fmtNum(r.beneficiaries) },
-        { key: 'is_published', label: 'เผยแพร่', type: 'num', render: r => r.is_published ? '<span class="chip chip-delivered">เผยแพร่</span>' : '<span class="chip chip-preparing">ซ่อน</span>' },
-        { key: 'actions', label: '', sortable: false, cls: 'actions', render: r => `
-          <a class="btn btn-outline btn-sm" href="#locations?project=${r.id}" title="ดูจุดช่วยเหลือ">${icon('pin')}</a>
-          <button class="btn btn-outline btn-sm" data-edit="${r.id}">แก้ไข</button>
-          <button class="btn btn-ghost-dark btn-sm" data-del="${r.id}" aria-label="ลบ">${icon('close')}</button>` },
-      ],
-      onRender: el => {
-        $$('[data-edit]', el).forEach(b => b.onclick = async () => { if (await editProject(rows.find(r => r.id === +b.dataset.edit))) route(); });
-        $$('[data-del]', el).forEach(b => b.onclick = async () => {
-          const p = rows.find(r => r.id === +b.dataset.del);
-          if (!await confirmBox(`ลบโครงการ <b>รอบที่ ${esc(p.round_no)} ${esc(p.name)}</b> ?<br><br>จุดช่วยเหลือ ${p.location_count} จุด และภาพทั้งหมด ${p.photo_count} ภาพในโครงการนี้จะถูกลบด้วย และไม่สามารถกู้คืนได้`)) return;
-          try { await call(`/api/admin/projects/${p.id}`, { method: 'DELETE' }); toast('ลบโครงการแล้ว', 'success'); route(); } catch (e) { fail(e); }
-        });
-      },
+      <div class="page-title"><div><h1>โครงการ</h1><p>${rows.length} โครงการ · กดที่โครงการเพื่อเพิ่ม/แก้จุดช่วยเหลือบนแผนที่</p></div><button class="btn btn-gold" id="newProj">${icon('plus')} เพิ่มโครงการ</button></div>
+      ${notice}
+      <section class="acard"><div class="toolbar" style="grid-template-columns:1fr">
+        <div class="search-input">${icon('search')}<input class="input" id="q" placeholder="ค้นหารอบ / ชื่อโครงการ / จังหวัด"></div>
+        <div class="chips-row" id="catChips"></div></div>
+        <div class="acard-body"><div class="pj-grid" id="pjGrid"></div></div></section>`;
+    const draw = () => {
+      const present = [...new Set(rows.map(r => r.category || 'flood'))];
+      $('#catChips').innerHTML = [['', 'ทุกประเภท']].concat(present.map(k => [k, `${category(k).icon} ${category(k).label}`]))
+        .map(([k, t]) => `<button type="button" class="fchip${cat === k ? ' on' : ''}" data-c="${k}">${t}</button>`).join('');
+      const list = rows.filter(r => (!cat || (r.category || 'flood') === cat) && (!q || `${r.round_no} ${r.name} ${r.provinces || ''}`.toLowerCase().includes(q)))
+        .sort((a, b) => String(b.start_date || b.created_at || '').localeCompare(String(a.start_date || a.created_at || '')));
+      $('#pjGrid').innerHTML = list.length ? list.map(r => `
+        <article class="pj-card">
+          <a class="pj-main" href="#projects/${r.id}">
+            <span class="pj-ic">${category(r.category).icon}</span>
+            <span class="pj-tx">
+              <span class="pj-top"><b>รอบที่ ${esc(r.round_no)}</b>${statusChip(r.status)}${r.is_published ? '' : '<span class="chip chip-preparing">ซ่อน</span>'}</span>
+              <span class="pj-name">${esc(r.name)}</span>
+              <span class="pj-sub">${esc(category(r.category).label)} · ${esc(r.provinces || 'ยังไม่มีจุด')} · ${fmtDate(r.start_date)}</span>
+              <span class="pj-stats"><span><b>${r.delivered_count}/${r.location_count}</b> จุดส่งมอบ</span><span><b>${fmtNum(r.beneficiaries)}</b> คน</span><span><b>${fmtNum(r.photo_count)}</b> ภาพ</span></span>
+            </span>
+          </a>
+          <div class="pj-acts">
+            <a class="btn btn-navy btn-sm" href="#projects/${r.id}">${icon('map')} เปิดแผนที่</a>
+            <button class="btn btn-outline btn-sm" data-edit="${r.id}">แก้ไข</button>
+            <button class="btn btn-ghost-dark btn-sm" data-del="${r.id}" aria-label="ลบ">${icon('close')}</button>
+          </div>
+        </article>`).join('') : `<div class="empty" style="grid-column:1/-1">${icon('folder')}<h3>ยังไม่มีโครงการ</h3><p>กด “เพิ่มโครงการ” เพื่อเริ่มต้น</p></div>`;
+    };
+    main.addEventListener('click', async e => {
+      const c = e.target.closest('[data-c]'), ed = e.target.closest('[data-edit]'), dl = e.target.closest('[data-del]');
+      if (c) { cat = c.dataset.c; draw(); }
+      else if (ed) { if (await editProject(rows.find(r => r.id === +ed.dataset.edit))) route(); }
+      else if (dl) {
+        const p = rows.find(r => r.id === +dl.dataset.del);
+        if (!await confirmBox(`ลบโครงการ <b>รอบที่ ${esc(p.round_no)} ${esc(p.name)}</b> ?<br><br>จุดช่วยเหลือ ${p.location_count} จุด และภาพทั้งหมด ${p.photo_count} ภาพในโครงการนี้จะถูกลบด้วย และไม่สามารถกู้คืนได้`)) return;
+        try { await call(`/api/admin/projects/${p.id}`, { method: 'DELETE' }); toast('ลบโครงการแล้ว', 'success'); route(); } catch (err) { fail(err); }
+      }
     });
-    $('#q').oninput = e => { const q = e.target.value.trim().toLowerCase(); t.set(rows.filter(r => !q || `${r.round_no} ${r.name} ${r.provinces || ''}`.toLowerCase().includes(q))); };
-    $('#newProj').onclick = async () => { if (await editProject(null)) route(); };
+    $('#q').oninput = e => { q = e.target.value.trim().toLowerCase(); draw(); };
+    $('#newProj').onclick = createProject;
+    draw();
+  }
+
+  // ─────────────── PROJECT MAP BUILDER ───────────────
+  // Add points by tapping the map: the area (ตำบล/อำเภอ/จังหวัด) is filled in from the coordinates.
+  const stripArea = s => String(s || '').replace(/^(จังหวัด|อำเภอ|เขต|ตำบล|แขวง)\s*/, '').trim();
+  async function reverseGeocode(lat, lng) {
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&accept-language=th&zoom=17&addressdetails=1`).then(x => x.json());
+      const a = r.address || {};
+      // The Thai level names land in different keys per area (city, city_district, municipality, quarter…):
+      // find them by their prefix first, then fall back to the usual keys.
+      const vals = Object.values(a).filter(v => typeof v === 'string');
+      const byPrefix = re => vals.find(v => re.test(v));
+      const bkk = vals.some(v => /กรุงเทพ/.test(v));
+      const province = bkk ? 'กรุงเทพมหานคร' : stripArea(byPrefix(/^จังหวัด/) || a.province || a.state || '');
+      const district = stripArea(byPrefix(bkk ? /^เขต/ : /^อำเภอ/) || (bkk ? a.suburb : a.county) || '');
+      const sub = byPrefix(bkk ? /^แขวง/ : /^ตำบล/) || [a.city_district, a.subdistrict, a.municipality].find(v => v && !/^เทศบาล/.test(v) && stripArea(v) !== district);
+      return { province, district, subdistrict: stripArea(sub || ''), name: r.name || a.amenity || a.building || a.neighbourhood || a.village || a.hamlet || '' };
+    } catch { return null; }
+  }
+  async function searchPlace(q) {
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=th&accept-language=th&q=${encodeURIComponent(q)}`).then(x => x.json());
+    return r[0] ? [+r[0].lat, +r[0].lon] : null;
+  }
+
+  async function pageProjectWorkspace(id, parts) {
+    const pid = Number(parts[1]);
+    const [projects, allLocs, provs, notice] = await Promise.all([call('/api/admin/projects'), call('/api/admin/locations'), provinces(), backendNotice()]);
+    if (id !== renderId) return;
+    const p = projects.find(x => x.id === pid);
+    if (!p) { main.innerHTML = `<div class="empty">${icon('folder')}<h3>ไม่พบโครงการ</h3><p><a class="link-more" href="#projects">กลับไปหน้าโครงการ</a></p></div>`; return; }
+    let locs = allLocs.filter(l => l.project_id === pid);
+    document.body.classList.add('ws-mode');
+    onCleanup(() => document.body.classList.remove('ws-mode'));
+
+    main.innerHTML = `${notice}
+      <div class="ws">
+        <aside class="ws-panel">
+          <div class="ws-head">
+            <a class="ws-back" href="#projects">${icon('back')} โครงการทั้งหมด</a>
+            <div class="ws-chips">${catChip(p.category)}<span class="chip chip-round">รอบที่ ${esc(p.round_no)}</span>${statusChip(p.status)}</div>
+            <h1>${esc(p.name)}</h1>
+            <div class="ws-acts"><button type="button" class="btn btn-outline btn-sm" id="wsEdit">แก้ไขโครงการ</button><a class="btn btn-ghost-dark btn-sm" href="./#/projects/${pid}" target="_blank" rel="noopener">${icon('external')} หน้าเว็บ</a></div>
+            <div class="ws-stats" id="wsStats"></div>
+          </div>
+          <div class="ws-body" id="wsBody"></div>
+        </aside>
+        <div class="ws-mapwrap">
+          <div class="ws-map" id="wsMap"></div>
+          <form class="ws-search" id="wsSearch" role="search"><span class="ic-wrap">${icon('search')}</span><input class="input" name="q" placeholder="ค้นหาสถานที่ เช่น วัด... อำเภอ..." autocomplete="off"></form>
+          <div class="ws-hint" id="wsHint" hidden><b>แตะบนแผนที่ตรงจุดส่งมอบ</b><span>ลากแผนที่เพื่อเลื่อน ซูมเข้าเพื่อความแม่นยำ</span>
+            <div class="ws-hint-acts"><button type="button" class="btn btn-outline btn-sm" id="wsGps">${icon('navigation')} ใช้ตำแหน่งปัจจุบัน</button><button type="button" class="btn btn-ghost-dark btn-sm" id="wsCancel">ยกเลิก</button></div></div>
+          <button type="button" class="btn btn-gold ws-add" id="wsAdd">${icon('plus')} เพิ่มจุดบนแผนที่</button>
+        </div>
+      </div>`;
+
+    const map = makeMap($('#wsMap'), { zoomControl: true });
+    onCleanup(() => map.remove());
+    const markers = new Map();
+    let temp = null, adding = false, selected = null;
+    const mapEl = $('#wsMap');
+
+    const drawStats = () => {
+      const del = locs.filter(l => l.status === 'delivered');
+      $('#wsStats').innerHTML = `<span><b>${locs.length}</b> จุด</span><span><b>${del.length}</b> ส่งมอบแล้ว</span><span><b>${fmtNum(del.reduce((s, l) => s + (l.beneficiaries || 0), 0))}</b> คน</span><span><b>${fmtNum(locs.reduce((s, l) => s + (l.photo_count || 0), 0))}</b> ภาพ</span>`;
+    };
+    const placeMarkers = (fit) => {
+      markers.forEach(m => m.remove()); markers.clear();
+      locs.filter(l => l.lat != null).forEach((l, i) => {
+        const m = L.marker([l.lat, l.lng], { icon: pinIcon(l.status, l.id === selected, i * 60), title: `#${l.code} ${l.name}`, riseOnHover: true })
+          .on('click', () => { if (!adding) showPoint(l.id); }).addTo(map);
+        markers.set(l.id, m);
+      });
+      if (fit) {
+        const pts = locs.filter(l => l.lat != null).map(l => [l.lat, l.lng]);
+        if (pts.length > 1) map.fitBounds(L.latLngBounds(pts), { padding: [50, 50], maxZoom: 14 });
+        else if (pts.length === 1) map.setView(pts[0], 14);
+        else map.setView(CFG.mapCenter, CFG.mapZoom);
+      }
+    };
+    const select = lid => { selected = lid; markers.forEach((m, k) => setPinSelected(m, k === lid)); };
+    const reloadLocs = async () => { locs = (await call('/api/admin/locations')).filter(l => l.project_id === pid); drawStats(); placeMarkers(false); };
+
+    // ── list ──
+    function showList() {
+      select(null); stopAdding(); clearTemp();
+      const sorted = [...locs].sort((a, b) => String(b.delivery_date || '').localeCompare(String(a.delivery_date || '')));
+      $('#wsBody').innerHTML = sorted.length ? `<ul class="ws-list">${sorted.map(l => `
+        <li><button type="button" class="ws-row" data-lid="${l.id}">
+          <span class="th">${l.cover_thumb ? `<img src="${esc(l.cover_thumb)}" alt="" loading="lazy">` : `<span class="ph-none">${icon('image')}</span>`}</span>
+          <span class="tx"><b>#${esc(l.code)} · ${esc(l.name)}</b><small>${esc(areaText(l))}</small><span class="ft">${statusChip(l.status)}<span>${fmtDate(l.delivery_date)}</span>${l.lat == null ? '<span class="warn">ไม่มีพิกัด</span>' : ''}</span></span>
+        </button></li>`).join('')}</ul>`
+        : `<div class="ws-empty">${icon('pin')}<h3>ยังไม่มีจุดช่วยเหลือ</h3><p>กด <b>“เพิ่มจุดบนแผนที่”</b> แล้วแตะบนแผนที่ตรงจุดส่งมอบ ระบบจะเติมตำบล อำเภอ จังหวัดให้อัตโนมัติ</p></div>`;
+    }
+    $('#wsBody').addEventListener('click', e => { const r = e.target.closest('[data-lid]'); if (r) showPoint(Number(r.dataset.lid)); });
+
+    // ── add mode ──
+    function startAdding() {
+      select(null); clearTemp(); adding = true;
+      $('#wsHint').hidden = false; $('#wsAdd').hidden = true; mapEl.classList.add('ws-picking');
+      if (window.matchMedia('(max-width: 899px)').matches) mapEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    function stopAdding() { adding = false; $('#wsHint').hidden = true; $('#wsAdd').hidden = false; mapEl.classList.remove('ws-picking'); }
+    function clearTemp() { if (temp) { temp.remove(); temp = null; } }
+    $('#wsAdd').onclick = startAdding;
+    $('#wsCancel').onclick = () => { stopAdding(); showList(); };
+    $('#wsGps').onclick = () => {
+      if (!navigator.geolocation) return toast('อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง', 'warning');
+      navigator.geolocation.getCurrentPosition(pos => { map.setView([pos.coords.latitude, pos.coords.longitude], 16); dropPin(L.latLng(pos.coords.latitude, pos.coords.longitude)); },
+        () => toast('อ่านตำแหน่งไม่ได้ — ตรวจสอบการอนุญาตตำแหน่ง', 'error'), { enableHighAccuracy: true, timeout: 10000 });
+    };
+    map.on('click', e => { if (adding) dropPin(e.latlng); });
+
+    function dropPin(latlng) {
+      stopAdding(); clearTemp();
+      temp = L.marker(latlng, { icon: pinIcon('preparing', true), draggable: true, zIndexOffset: 2000 }).addTo(map);
+      temp.on('dragend', () => fillArea(temp.getLatLng(), false));
+      showAddForm(latlng);
+    }
+
+    // ── quick add form ──
+    let areaReq = 0;
+    async function showAddForm(latlng) {
+      const next = await call('/api/admin/locations/next-code');
+      $('#wsBody').innerHTML = `
+        <form class="ws-form" id="wsForm" novalidate>
+          <div class="ws-form-head"><h3>${icon('pin')} จุดใหม่ #<span id="fCode">${esc(next.code)}</span></h3><small id="fCoord"></small></div>
+          <label class="field"><span>ชื่อจุด <span class="req">*</span></span><input class="input" name="name" maxlength="200" placeholder="เช่น ศาลาวัด... / โรงเรียน... / ชุมชน..." required></label>
+          <div class="field"><span>พื้นที่ <span class="hint" id="fAreaHint">กำลังหาชื่อพื้นที่จากพิกัด…</span></span>
+            <div class="ws-area"><div id="fProv"></div><input class="input" name="district" placeholder="อำเภอ / เขต"><input class="input" name="subdistrict" placeholder="ตำบล / แขวง"></div></div>
+          <div class="ws-2">
+            <label class="field"><span>วันที่ส่งมอบ</span><input class="input" type="date" name="delivery_date" value="${todayISO()}"></label>
+            <label class="field"><span>ผู้ได้รับ (คน)</span><input class="input" type="number" min="0" inputmode="numeric" name="beneficiaries" value="0"></label>
+          </div>
+          <div class="field"><span>สถานะ</span><div class="seg-ctl" id="fStatus">${STATUS_KEYS.map(k => `<button type="button" data-v="${k}" class="${k === 'preparing' ? 'on' : ''}">${STATUS[k].icon} ${STATUS[k].label}</button>`).join('')}</div></div>
+          <div class="field"><span>สิ่งของ <span class="hint">(เพิ่มทีหลังได้)</span></span><datalist id="wsItems">${COMMON_ITEMS.map(i => `<option value="${esc(i)}">`).join('')}</datalist><datalist id="wsUnits">${COMMON_UNITS.map(i => `<option value="${esc(i)}">`).join('')}</datalist>
+            <div class="items-editor" id="fItems"></div><button type="button" class="btn btn-ghost-dark btn-sm" id="fAddItem" style="align-self:flex-start">${icon('plus')} เพิ่มรายการ</button></div>
+          <div class="ws-form-acts"><button type="button" class="btn btn-outline" id="fCancel">ยกเลิก</button><button type="submit" class="btn btn-gold" id="fSave">${icon('check')} บันทึกจุด</button></div>
+        </form>`;
+      const f = $('#wsForm');
+      let status = 'preparing';
+      const items = [{ name: '', quantity: '', unit: '' }];
+      const ssProv = new SearchSelect($('#fProv'), { placeholder: '— จังหวัด —', searchPlaceholder: 'ค้นหาจังหวัด...', options: provs.map(x => ({ value: x.id, label: x.name_th })) });
+      onCleanup(() => ssProv.destroy());
+      f._ssProv = ssProv;
+      const drawItems = () => {
+        $('#fItems').innerHTML = items.map((it, i) => `<div class="item-row" data-i="${i}">
+          <input class="input" list="wsItems" data-k="name" value="${esc(it.name)}" placeholder="ชื่อสิ่งของ" aria-label="ชื่อสิ่งของ">
+          <input class="input" type="number" min="0" step="any" inputmode="decimal" data-k="quantity" value="${it.quantity ?? ''}" placeholder="จำนวน" aria-label="จำนวน">
+          <input class="input" list="wsUnits" data-k="unit" value="${esc(it.unit || '')}" placeholder="หน่วย" aria-label="หน่วย">
+          <button type="button" class="btn btn-ghost-dark btn-icon" data-rm="${i}" aria-label="ลบรายการ">${icon('close')}</button></div>`).join('');
+      };
+      drawItems();
+      $('#fItems').addEventListener('input', e => { const r = e.target.closest('[data-i]'); if (r) items[+r.dataset.i][e.target.dataset.k] = e.target.value; });
+      $('#fItems').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (b) { items.splice(+b.dataset.rm, 1); if (!items.length) items.push({ name: '', quantity: '', unit: '' }); drawItems(); } });
+      $('#fAddItem').onclick = () => { items.push({ name: '', quantity: '', unit: '' }); drawItems(); };
+      $('#fStatus').onclick = e => { const t = e.target.closest('[data-v]'); if (!t) return; status = t.dataset.v; $$('#fStatus button').forEach(b => b.classList.toggle('on', b === t)); temp && temp.setIcon(pinIcon(status, true)); };
+      $('#fCancel').onclick = () => showList();
+      fillArea(latlng, true);
+      f.onsubmit = async e => {
+        e.preventDefault();
+        const ll = temp ? temp.getLatLng() : latlng;
+        if (!f.name.value.trim()) { f.name.focus(); return toast('กรุณาใส่ชื่อจุด', 'warning'); }
+        const body = {
+          project_id: pid, code: $('#fCode').textContent, name: f.name.value, delivery_date: f.delivery_date.value, status,
+          beneficiaries: f.beneficiaries.value, lat: Math.round(ll.lat * 1e6) / 1e6, lng: Math.round(ll.lng * 1e6) / 1e6,
+          province_id: Number(ssProv.getValue()) || null, area_names: { district: f.district.value, subdistrict: f.subdistrict.value },
+          items: items.filter(i => String(i.name || '').trim()),
+        };
+        const btn = $('#fSave'); btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+        try {
+          const r = await call('/api/admin/locations', { method: 'POST', body });
+          clearTemp(); resetGeoCache();
+          await reloadLocs();
+          toast('บันทึกจุดแล้ว — เพิ่มรูปได้เลย', 'success');
+          showPoint(r.id);
+        } catch (err) { fail(err); btn.disabled = false; btn.innerHTML = `${icon('check')} บันทึกจุด`; }
+      };
+    }
+    async function fillArea(latlng, setName) {
+      const f = $('#wsForm'); if (!f) return;
+      $('#fCoord').textContent = `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`;
+      const hint = $('#fAreaHint'); hint.textContent = 'กำลังหาชื่อพื้นที่จากพิกัด…';
+      const my = ++areaReq;
+      const g = await reverseGeocode(latlng.lat, latlng.lng);
+      if (my !== areaReq || !$('#wsForm')) return;
+      if (!g) { hint.textContent = 'หาชื่อพื้นที่ไม่ได้ — กรอกเอง'; return; }
+      const pv = provs.find(x => x.name_th === g.province);
+      f._ssProv.setValue(pv ? pv.id : '');
+      f.district.value = g.district || ''; f.subdistrict.value = g.subdistrict || '';
+      if (setName && g.name && !f.name.value) f.name.value = g.name;
+      hint.textContent = pv ? 'เติมจากพิกัดแล้ว ตรวจสอบ/แก้ไขได้' : 'ไม่พบจังหวัดจากพิกัด — เลือกเอง';
+    }
+
+    // ── point detail: status, photos, move pin ──
+    async function showPoint(lid) {
+      stopAdding(); clearTemp(); select(lid);
+      const l = locs.find(x => x.id === lid);
+      if (l && l.lat != null) map.panTo([l.lat, l.lng]);
+      $('#wsBody').innerHTML = '<div class="loading" style="min-height:160px"><div class="spinner"></div></div>';
+      const d = await call(`/api/admin/locations/${lid}`);
+      if (selected !== lid) return;
+      $('#wsBody').innerHTML = `
+        <div class="ws-point">
+          <button type="button" class="ws-back" id="ptBack">${icon('back')} รายการจุด</button>
+          <h3>#${esc(d.code)} · ${esc(d.name)}</h3>
+          <p class="ws-area-tx">${icon('pin')} ${esc(areaText(d))}</p>
+          <div class="seg-ctl" id="ptStatus">${STATUS_KEYS.map(k => `<button type="button" data-v="${k}" class="${k === d.status ? 'on' : ''}">${STATUS[k].icon} ${STATUS[k].label}</button>`).join('')}</div>
+          <ul class="kv" style="margin-top:8px">
+            <li><span class="k">วันที่ส่งมอบ</span><span class="v">${fmtDate(d.delivery_date)}</span></li>
+            <li><span class="k">ผู้ได้รับ</span><span class="v">${fmtNum(d.beneficiaries)} คน</span></li>
+            <li><span class="k">สิ่งของ</span><span class="v">${d.items.map(i => `${esc(i.name)} ${fmtNum(i.quantity)} ${esc(i.unit || '')}`).join('<br>') || '-'}</span></li>
+          </ul>
+          <div class="ws-pt-acts">
+            <a class="btn btn-outline btn-sm" href="#locations/edit/${d.id}">${icon('heart')} แก้ไขข้อมูลเต็ม</a>
+            <button type="button" class="btn btn-outline btn-sm" id="ptMove">${icon('pin')} ย้ายหมุด</button>
+          </div>
+          <h4 class="ws-sub">ภาพถ่าย (${d.photos.length})</h4>
+          <div id="ptUp"></div>
+          <div class="ph-grid ws-ph" id="ptGrid" style="margin-top:12px"></div>
+        </div>`;
+      $('#ptBack').onclick = showList;
+      $('#ptStatus').onclick = async e => {
+        const t = e.target.closest('[data-v]'); if (!t || t.classList.contains('on')) return;
+        try {
+          await call(`/api/admin/locations/${lid}/status`, { method: 'PATCH', body: { status: t.dataset.v } });
+          $$('#ptStatus button').forEach(b => b.classList.toggle('on', b === t));
+          toast(`อัปเดตสถานะเป็น “${STATUS[t.dataset.v].label}” แล้ว`, 'success');
+          await reloadLocs(); select(lid);
+        } catch (err) { fail(err); }
+      };
+      $('#ptMove').onclick = () => {
+        const m = markers.get(lid);
+        if (!m) return toast('จุดนี้ยังไม่มีพิกัด — ใช้ “แก้ไขข้อมูลเต็ม”', 'warning');
+        m.dragging.enable(); toast('ลากหมุดไปตำแหน่งใหม่ได้เลย', 'info');
+        m.once('dragend', async () => {
+          m.dragging.disable();
+          const ll = m.getLatLng();
+          try { await call(`/api/admin/locations/${lid}/field`, { method: 'PATCH', body: { lat: Math.round(ll.lat * 1e6) / 1e6, lng: Math.round(ll.lng * 1e6) / 1e6 } }); toast('ย้ายหมุดแล้ว', 'success'); await reloadLocs(); select(lid); }
+          catch (err) { fail(err); }
+        });
+      };
+      uploader($('#ptUp'), { locationId: () => lid, defaultDate: () => d.delivery_date || todayISO(), onDone: async () => { await reloadLocs(); showPoint(lid); } });
+      photoGrid($('#ptGrid'), d.photos, { coverId: d.cover_photo_id, onChange: async () => { await reloadLocs(); showPoint(lid); } });
+    }
+
+    // ── search a place to jump the map ──
+    $('#wsSearch').onsubmit = async e => {
+      e.preventDefault();
+      const q = e.target.q.value.trim(); if (!q) return;
+      setLoading(true);
+      try { const ll = await searchPlace(q); ll ? map.setView(ll, 15) : toast('ไม่พบสถานที่', 'warning'); }
+      catch { toast('ค้นหาไม่สำเร็จ', 'error'); } finally { setLoading(false); }
+    };
+    $('#wsEdit').onclick = async () => { if (await editProject(p)) route(); };
+
+    drawStats(); placeMarkers(true); showList();
+    setTimeout(() => map.invalidateSize(), 50);
+    if (!locs.length) setTimeout(startAdding, 400);
   }
 
   // ─────────────── LOCATIONS (list) ───────────────

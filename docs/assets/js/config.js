@@ -1,11 +1,15 @@
 // RATTANA HELP — site settings (edit here, no rebuild needed)
 window.RH_CONFIG = {
-  version: '2.3',
+  version: '2.4',
   // Google Apps Script web app URL (…/exec) — the data backend when hosted on GitHub Pages.
   // See apps-script/SETUP.md. Leave empty only when running the Node server (npm start).
   apiUrl: 'https://script.google.com/macros/s/AKfycbwMY9VNDGlHMZmz87_XaYful8BxJtzyvS0gSccHPlIhaj8tru1D0I8MI-mM0FFolBo5/exec',
   // 'CE' = ค.ศ. (03/10/2026) · 'BE' = พ.ศ. (03/10/2569)
   dateEra: 'BE',
+  // Home page hero text (the site now covers every kind of relief project, not only floods)
+  heroTag: 'โครงการช่วยเหลือ · รัตนไพบูลย์',
+  heroTitle: 'คนละไม้ คนละมือ',
+  heroSubtitle: ['ส่งต่อกำลังใจและความห่วงใย', 'ให้ผู้ประสบภัยน้ำท่วม'],
   // Link to Rattanaphaiboon's own ordering / support channel (LINE OA, website, etc.).
   // Leave empty to hide the button. This app never takes orders or payments itself.
   supportUrl: '',

@@ -1,7 +1,7 @@
 // RATTANA HELP — public site (hash-routed SPA)
 (function () {
   'use strict';
-  const { api, esc, fmtNum, fmtDate, fmtDateRange, areaText, STATUS, STAGES, STEPS, statusChip, locTitle, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG } = window.RH;
+  const { api, esc, fmtNum, fmtDate, fmtDateRange, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, locTitle, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG } = window.RH;
   let view = document.getElementById('view');
   let cleanups = [];
   let renderId = 0;
@@ -50,7 +50,7 @@
 
   function locCard(l) {
     return `<a class="loc-card" href="#/locations/${l.id}">
-      <div class="ph">${img(l.cover_thumb, l.name)}${statusChip(l.status)}</div>
+      <div class="ph">${img(l.cover_thumb, l.name)}${statusChip(l.status)}<span class="cat-badge" title="${esc(category(l.project_category).label)}">${category(l.project_category).icon}</span></div>
       <div class="bd">
         <span class="loc-code">${locTitle(l)}</span>
         <span class="loc-name">${esc(l.name)}</span>
@@ -70,6 +70,7 @@
         <div class="flex-between" style="display:flex;justify-content:space-between;gap:8px;align-items:center">
           <span class="proj-round">รอบที่ ${esc(p.round_no)}</span>${statusChip(p.status, true)}
         </div>
+        <div>${catChip(p.category)}</div>
         <span class="proj-name">${esc(p.name)}</span>
         <div class="meta-row">
           ${p.provinces ? `<span>${icon('pin')}พื้นที่จังหวัด${esc(p.provinces)}</span>` : ''}
@@ -107,8 +108,8 @@
         <div class="hero-shade"></div>
         <div class="container hero-inner">
           <div class="hero-card glass">
-            <span class="hero-tag">${icon('heart')} โครงการช่วยเหลือน้ำท่วม · รัตนไพบูลย์</span>
-            <h1><span class="gold">คนละไม้ คนละมือ</span><span class="rest">ส่งต่อกำลังใจและความห่วงใย<br>ให้ผู้ประสบภัยน้ำท่วม</span></h1>
+            <span class="hero-tag">${icon('heart')} ${esc(CFG.heroTag || 'โครงการช่วยเหลือ · รัตนไพบูลย์')}</span>
+            <h1><span class="gold">${esc(CFG.heroTitle || 'คนละไม้ คนละมือ')}</span><span class="rest">${(CFG.heroSubtitle || ['ส่งต่อกำลังใจและความห่วงใย', 'ให้ผู้ประสบภัยน้ำท่วม']).map(esc).join('<br>')}</span></h1>
             <p class="hero-lead">ร่วมสั่งซื้อสินค้า เพื่อส่งต่อให้ผู้ประสบภัย</p>
             <p class="hero-sub">รัตนไพบูลย์ขอร่วมเป็นส่วนหนึ่งในการส่งต่อความช่วยเหลือ พร้อมกับผู้สนับสนุนและผู้ร่วมโครงการ</p>
             <div class="hero-actions">
@@ -254,6 +255,7 @@
     });
 
     const visible = () => locs.filter(l => st.on[l.status]
+      && (!st.category || l.project_category === st.category)
       && (!st.province || String(l.province_id) === st.province)
       && (!st.project || String(l.project_id) === st.project))
       .sort((a, b) => String(b.delivery_date).localeCompare(String(a.delivery_date)));
@@ -275,16 +277,17 @@
 
     const provinces = [...new Map(locs.filter(l => l.province_id).map(l => [l.province_id, l.province])).entries()].sort((a, b) => a[1].localeCompare(b[1], 'th'));
     const projects = [...new Map(locs.map(l => [l.project_id, `รอบที่ ${l.round_no} · ${l.project_name}`])).entries()].sort((a, b) => b[1].localeCompare(a[1], 'th'));
-    let ssProv, ssProj;
+    const cats = [...new Set(locs.map(l => l.project_category))].filter(Boolean);
+    let ssProv, ssProj, ssCat;
 
     function renderList() {
       st.mode = 'list';
       sheet.classList.remove('is-detail');
       document.getElementById('sheetToggle').innerHTML = `${icon('list')} รายการ`;
-      ssProv?.destroy(); ssProj?.destroy();
+      ssProv?.destroy(); ssProj?.destroy(); ssCat?.destroy();
       body.innerHTML = `
         <div class="map-filters">
-          <div id="fProv"></div><div id="fProj"></div>
+          <div id="fCat"></div><div id="fProv"></div><div id="fProj" class="full"></div>
         </div>
         <ul class="loc-list" id="locList"></ul>`;
       ssProv = new SearchSelect(document.getElementById('fProv'), {
@@ -293,13 +296,18 @@
         onChange: v => { st.province = v; refresh(true); },
       });
       ssProj = new SearchSelect(document.getElementById('fProj'), {
-        allLabel: 'ทุกรอบ', value: st.project, searchPlaceholder: 'ค้นหารอบ...',
+        allLabel: 'ทุกโครงการ / รอบ', value: st.project, searchPlaceholder: 'ค้นหารอบ...',
         options: projects.map(([v, label]) => ({ value: v, label })),
         onChange: v => { st.project = v; refresh(true); },
       });
+      ssCat = new SearchSelect(document.getElementById('fCat'), {
+        allLabel: 'ทุกประเภท', value: st.category || '',
+        options: cats.map(k => ({ value: k, label: `${category(k).icon} ${category(k).label}` })),
+        onChange: v => { st.category = v; refresh(true); },
+      });
       renderRows();
     }
-    onCleanup(() => { ssProv?.destroy(); ssProj?.destroy(); });
+    onCleanup(() => { ssProv?.destroy(); ssProj?.destroy(); ssCat?.destroy(); });
 
     function renderRows() {
       const ul = document.getElementById('locList');
@@ -341,7 +349,7 @@
       st.mode = 'detail';
       sheet.classList.add('is-open', 'is-detail');
       document.getElementById('sheetToggle').innerHTML = `${icon('close')} ปิด`;
-      ssProv?.destroy(); ssProj?.destroy(); ssProv = ssProj = null;
+      ssProv?.destroy(); ssProj?.destroy(); ssCat?.destroy(); ssProv = ssProj = ssCat = null;
       body.innerHTML = `<div class="loading" style="min-height:200px"><div class="spinner"></div></div>`;
       body.scrollTop = 0;
       const l = locs.find(x => x.id === lid);
@@ -409,7 +417,7 @@
     const extra = photos.length - shown.length;
     return `
       <button type="button" class="dcard-back">${icon('back')} กลับไปที่รายการ</button>
-      <div>${statusChip(d.status, true)}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${statusChip(d.status, true)}${catChip(d.project_category)}</div>
       <h2 class="dcard-title" style="margin-top:8px">${locTitle(d)}</h2>
       <p class="dcard-name">${esc(d.name)} · รอบที่ ${esc(d.round_no)}</p>
       ${shown.length ? `<div class="dcard-photos n${shown.length}">${shown.map((p, i) => `
@@ -463,7 +471,7 @@
           <nav class="crumbs" aria-label="breadcrumb"><a href="#/projects">โครงการ</a><span class="sep">›</span><a href="#/projects/${d.project_id}">รอบที่ ${esc(d.round_no)}</a><span class="sep">›</span><span>#${esc(d.code)}</span></nav>
           <h1>${locTitle(d)}</h1>
           <p class="sub">${esc(d.name)}</p>
-          <div class="row">${statusChip(d.status, true)}<span class="chip chip-round">รอบที่ ${esc(d.round_no)}</span></div>
+          <div class="row">${statusChip(d.status, true)}<span class="chip chip-round">รอบที่ ${esc(d.round_no)}</span>${catChip(d.project_category)}</div>
         </div>
       </section>
 
@@ -559,14 +567,15 @@
   async function pageProjects(id, params) {
     const projects = await get('/api/projects');
     if (id !== renderId) return;
-    let filter = params.get('status') || '';
+    let filter = params.get('status') || '', cat = params.get('category') || '';
     view.innerHTML = `
       <section class="page-head"><div class="container">
         <span class="eyebrow">Relief Projects</span>
         <h1>โครงการช่วยเหลือ</h1>
-        <p>รายการรอบการช่วยเหลือทั้งหมด กดเพื่อดูรายละเอียด จุดส่งมอบ และภาพถ่ายของแต่ละรอบ</p>
+        <p>โครงการและรอบการช่วยเหลือทั้งหมดของรัตนไพบูลย์ กดเพื่อดูรายละเอียด จุดส่งมอบ และภาพถ่ายของแต่ละรอบ</p>
       </div></section>
       <div class="container" style="padding:20px 16px 48px">
+        <div class="chips-row" id="catFilter" style="margin-bottom:8px"></div>
         <div class="chips-row" id="projFilter" style="margin-bottom:16px"></div>
         <div class="proj-list" id="projList"></div>
       </div>`;
@@ -575,12 +584,19 @@
       projects.forEach(p => counts[p.status] = (counts[p.status] || 0) + 1);
       document.getElementById('projFilter').innerHTML = [['', 'ทั้งหมด'], ['preparing', 'กำลังเตรียม'], ['in_transit', 'กำลังนำส่ง'], ['delivered', 'ส่งมอบแล้ว']]
         .map(([k, t]) => `<button type="button" class="fchip${filter === k ? ' on' : ''}" data-f="${k}">${t} <span class="n">${counts[k] || 0}</span></button>`).join('');
-      const rows = projects.filter(p => !filter || p.status === filter);
+      const present = [...new Set(projects.map(p => p.category))];
+      document.getElementById('catFilter').innerHTML = present.length > 1 ? [['', 'ทุกประเภท', '']].concat(present.map(k => [k, category(k).label, category(k).icon]))
+        .map(([k, t, ic]) => `<button type="button" class="fchip${cat === k ? ' on' : ''}" data-c="${k}">${ic ? `${ic} ` : ''}${t} <span class="n">${k ? projects.filter(p => p.category === k).length : projects.length}</span></button>`).join('') : '';
+      const rows = projects.filter(p => (!filter || p.status === filter) && (!cat || p.category === cat));
       document.getElementById('projList').innerHTML = rows.length ? rows.map(projCard).join('') : emptyState('ไม่พบโครงการ', 'ยังไม่มีโครงการในสถานะนี้', 'folder');
     };
     document.getElementById('projFilter').addEventListener('click', e => {
       const b = e.target.closest('[data-f]'); if (!b) return;
-      filter = b.dataset.f; history.replaceState(null, '', filter ? `#/projects?status=${filter}` : '#/projects'); render();
+      filter = b.dataset.f; render();
+    });
+    document.getElementById('catFilter').addEventListener('click', e => {
+      const b = e.target.closest('[data-c]'); if (!b) return;
+      cat = b.dataset.c; render();
     });
     render();
   }
@@ -593,7 +609,7 @@
     view.innerHTML = `
       <section class="page-head"><div class="container">
         <nav class="crumbs"><a href="#/projects">โครงการ</a><span class="sep">›</span><span>รอบที่ ${esc(p.round_no)}</span></nav>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span class="chip chip-round">รอบที่ ${esc(p.round_no)}</span>${statusChip(p.status, true)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span class="chip chip-round">รอบที่ ${esc(p.round_no)}</span>${statusChip(p.status, true)}${catChip(p.category)}</div>
         <h1>${esc(p.name)}</h1>
         ${p.summary ? `<p>${esc(p.summary)}</p>` : ''}
         <div class="meta-row" style="color:rgba(255,255,255,.75);margin-top:10px">
@@ -657,7 +673,7 @@
     const opts = await get('/api/filters');
     if (id !== renderId) return;
     const f = {
-      province_id: params.get('province_id') || '', district_id: params.get('district_id') || '', project_id: params.get('project_id') || '',
+      category: params.get('category') || '', province_id: params.get('province_id') || '', district_id: params.get('district_id') || '', project_id: params.get('project_id') || '',
       date_from: params.get('date_from') || '', date_to: params.get('date_to') || '', stage: params.get('stage') || '',
     };
     let photos = [], total = 0, loading = false;
@@ -678,7 +694,8 @@
           <div class="filter-grid">
             <div><span class="field-label">จังหวัด</span><div id="gProv"></div></div>
             <div><span class="field-label">พื้นที่ (อำเภอ)</span><div id="gDist"></div></div>
-            <div class="full"><span class="field-label">รอบการช่วยเหลือ</span><div id="gProj"></div></div>
+            <div><span class="field-label">ประเภทโครงการ</span><div id="gCat"></div></div>
+            <div><span class="field-label">รอบการช่วยเหลือ</span><div id="gProj"></div></div>
             <div class="full"><span class="field-label">วันที่</span><div class="date-pair">
               <input type="date" class="input" id="gFrom" aria-label="ตั้งแต่วันที่" value="${esc(f.date_from)}">
               <input type="date" class="input" id="gTo" aria-label="ถึงวันที่" value="${esc(f.date_to)}"></div></div>
@@ -705,7 +722,11 @@
       allLabel: 'ทุกรอบการช่วยเหลือ', value: f.project_id, searchPlaceholder: 'ค้นหารอบ...', options: opts.projects.map(p => ({ value: p.id, label: `รอบที่ ${p.round_no} · ${p.name}` })),
       onChange: v => { f.project_id = v; reload(); },
     });
-    onCleanup(() => { ssProv.destroy(); ssDist.destroy(); ssProj.destroy(); });
+    const ssCat = new SearchSelect(document.getElementById('gCat'), {
+      allLabel: 'ทุกประเภท', value: f.category, options: (opts.categories || Object.keys(CATEGORIES)).map(k => ({ value: k, label: `${category(k).icon} ${category(k).label}` })),
+      onChange: v => { f.category = v; reload(); },
+    });
+    onCleanup(() => { ssProv.destroy(); ssDist.destroy(); ssProj.destroy(); ssCat.destroy(); });
 
     const panel = document.getElementById('fPanel');
     document.getElementById('fToggle').onclick = e => { panel.hidden = !panel.hidden; e.currentTarget.setAttribute('aria-expanded', String(!panel.hidden)); };
@@ -713,7 +734,7 @@
     document.getElementById('gTo').onchange = e => { f.date_to = e.target.value; reload(); };
     document.getElementById('gClear').onclick = () => {
       Object.keys(f).forEach(k => f[k] = '');
-      ssProv.setValue(''); ssDist.setOptions(districtsFor(), false); ssProj.setValue('');
+      ssProv.setValue(''); ssDist.setOptions(districtsFor(), false); ssProj.setValue(''); ssCat.setValue('');
       document.getElementById('gFrom').value = ''; document.getElementById('gTo').value = '';
       reload();
     };
@@ -738,7 +759,7 @@
     function reload() {
       const s = qs();
       history.replaceState(null, '', s ? `#/gallery?${s}` : '#/gallery');
-      const n = ['province_id', 'district_id', 'project_id', 'date_from', 'date_to'].filter(k => f[k]).length;
+      const n = ['category', 'province_id', 'district_id', 'project_id', 'date_from', 'date_to'].filter(k => f[k]).length;
       document.getElementById('fN').textContent = n ? `(${n})` : '';
       load(true);
     }
@@ -800,6 +821,17 @@
             <div><b>${st.preparing}</b><i style="background:#C5CCE3"></i>กำลังเตรียม</div>
           </div>
         </div>
+
+        ${(d.byCategory || []).length > 1 ? `<div class="card card-pad">
+          <h3 class="card-title">${icon('folder')} การช่วยเหลือตามประเภทโครงการ</h3>
+          <div class="cat-grid">${d.byCategory.map(c => `
+            <a class="cat-tile" href="#/projects?category=${esc(c.category)}">
+              <span class="cat-ic">${category(c.category).icon}</span>
+              <span class="cat-name">${esc(category(c.category).label)}</span>
+              <b>${fmtNum(c.beneficiaries)} <small>คน</small></b>
+              <span class="cat-sub">${fmtNum(c.projects)} โครงการ · ส่งมอบ ${fmtNum(c.delivered)} จุด</span>
+            </a>`).join('')}</div>
+        </div>` : ''}
 
         <div class="two-col">
           <div class="card card-pad">

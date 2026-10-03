@@ -7,6 +7,8 @@ const crypto = require('node:crypto');
 const { init, tx, hashPassword, verifyPassword, STATUSES, PHOTO_STAGES, TIMELINE_STEPS, UPLOAD_DIR } = require('./db');
 
 const PORT = Number(process.env.PORT) || 3000;
+// Project types (keep in sync with CATEGORIES in docs/assets/js/common.js and apps-script/Code.gs)
+const CATEGORY_KEYS = ['flood', 'drought', 'fire', 'storm', 'cold', 'community', 'education', 'health', 'other'];
 const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'docs');
 const SESSION_DAYS = 7;
@@ -81,7 +83,7 @@ const idParam = v => { const n = int(v); if (!n || n < 1) throw new HttpError(40
 
 // ─────────────────────────── queries ───────────────────────────
 const LOC_SELECT = `
-  SELECT l.*, p.round_no, p.name AS project_name, p.status AS project_status,
+  SELECT l.*, p.round_no, p.name AS project_name, p.status AS project_status, p.category AS project_category,
          pv.name_th AS province, d.name_th AS district, s.name_th AS subdistrict,
          COALESCE(ph.thumb_path, (SELECT thumb_path FROM relief_photos x WHERE x.location_id = l.id ORDER BY (x.stage = 'deliver') DESC, x.sort_order, x.id LIMIT 1)) AS cover_thumb,
          COALESCE(ph.file_path,  (SELECT file_path  FROM relief_photos x WHERE x.location_id = l.id ORDER BY (x.stage = 'deliver') DESC, x.sort_order, x.id LIMIT 1)) AS cover_url,
@@ -96,7 +98,7 @@ const LOC_SELECT = `
 
 const PHOTO_SELECT = `
   SELECT ph.*, l.code AS location_code, l.name AS location_name, l.project_id,
-         p.round_no, p.name AS project_name,
+         p.round_no, p.name AS project_name, p.category AS project_category,
          pv.name_th AS province, d.name_th AS district, s.name_th AS subdistrict,
          l.province_id, l.district_id, l.subdistrict_id
   FROM relief_photos ph
@@ -176,6 +178,7 @@ function photoQuery(q, publicOnly) {
   eq('l.subdistrict_id', q.get('subdistrict_id'));
   eq('l.project_id', q.get('project_id'));
   eq('ph.location_id', q.get('location_id'));
+  const cat = q.get('category'); if (CATEGORY_KEYS.includes(cat)) { where.push('p.category = ?'); params.push(cat); }
   const stage = q.get('stage'); if (PHOTO_STAGES.includes(stage)) { where.push('ph.stage = ?'); params.push(stage); }
   const from = q.get('date_from'), to = q.get('date_to');
   if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) { where.push('COALESCE(ph.taken_date, l.delivery_date) >= ?'); params.push(from); }
@@ -261,7 +264,12 @@ route('GET', '/api/impact', (req, res) => {
     WHERE l.status = 'delivered' AND p.is_published = 1
     GROUP BY i.name, i.unit ORDER BY quantity DESC LIMIT 12`).all());
   const recent = plain(db.prepare(`${LOC_SELECT} WHERE p.is_published = 1 ORDER BY l.delivery_date DESC, l.id DESC LIMIT 6`).all());
-  json(res, 200, { stats: getStats(true), byProvince, byItem, projects: projectAggregates(), recent });
+  const byCategory = plain(db.prepare(`
+    SELECT p.category, COUNT(DISTINCT p.id) AS projects, COALESCE(SUM(l.status = 'delivered'), 0) AS delivered,
+           COALESCE(SUM(CASE WHEN l.status = 'delivered' THEN l.beneficiaries END), 0) AS beneficiaries
+    FROM relief_projects p LEFT JOIN relief_locations l ON l.project_id = p.id
+    WHERE p.is_published = 1 GROUP BY p.category ORDER BY beneficiaries DESC`).all());
+  json(res, 200, { stats: getStats(true), byProvince, byItem, byCategory, projects: projectAggregates(), recent });
 });
 
 route('GET', '/api/projects', (req, res) => json(res, 200, projectAggregates()));
@@ -294,6 +302,7 @@ route('GET', '/api/filters', (req, res) => {
     provinces: plain(db.prepare(`SELECT DISTINCT pv.id, pv.name_th AS name ${base.replace('WHERE', 'JOIN provinces pv ON pv.id = l.province_id WHERE')} ORDER BY pv.name_th`).all()),
     districts: plain(db.prepare(`SELECT DISTINCT d.id, d.name_th AS name, d.province_id ${base.replace('WHERE', 'JOIN districts d ON d.id = l.district_id WHERE')} ORDER BY d.name_th`).all()),
     projects: plain(db.prepare(`SELECT DISTINCT p.id, p.round_no, p.name ${base} ORDER BY p.round_no DESC`).all()),
+    categories: plain(db.prepare(`SELECT DISTINCT p.category ${base}`).all()).map(r => r.category),
   });
 });
 
@@ -344,17 +353,18 @@ function projectInput(b) {
   return [
     reqStr(b.round_no, 'รอบที่', 20), reqStr(b.name, 'ชื่อโครงการ', 200), str(b.summary, 500), str(b.description, 5000),
     oneOf(b.status, STATUSES, 'preparing'), date(b.start_date), date(b.end_date), str(b.supporters, 1000), b.is_published === false || b.is_published === 0 ? 0 : 1,
+    oneOf(b.category, CATEGORY_KEYS, 'flood'),
   ];
 }
 route('GET', '/api/admin/projects', (req, res) => json(res, 200, projectAggregates('1=1')), { field: true });
 route('POST', '/api/admin/projects', async (req, res) => {
   const v = projectInput(await readBody(req, 100_000));
-  const r = db.prepare('INSERT INTO relief_projects (round_no, name, summary, description, status, start_date, end_date, supporters, is_published) VALUES (?,?,?,?,?,?,?,?,?)').run(...v);
+  const r = db.prepare('INSERT INTO relief_projects (round_no, name, summary, description, status, start_date, end_date, supporters, is_published, category) VALUES (?,?,?,?,?,?,?,?,?,?)').run(...v);
   json(res, 201, { id: Number(r.lastInsertRowid) });
 });
 route('PUT', '/api/admin/projects/(\\d+)', async (req, res, [id]) => {
   const v = projectInput(await readBody(req, 100_000));
-  const r = db.prepare("UPDATE relief_projects SET round_no=?, name=?, summary=?, description=?, status=?, start_date=?, end_date=?, supporters=?, is_published=?, updated_at=datetime('now') WHERE id=?").run(...v, idParam(id));
+  const r = db.prepare("UPDATE relief_projects SET round_no=?, name=?, summary=?, description=?, status=?, start_date=?, end_date=?, supporters=?, is_published=?, category=?, updated_at=datetime('now') WHERE id=?").run(...v, idParam(id));
   if (!r.changes) throw new HttpError(404, 'ไม่พบโครงการ');
   json(res, 200, { ok: true });
 });
@@ -392,10 +402,29 @@ function saveUpdates(lid, updates) {
   }
 }
 
+// Points added on the map arrive with area names (from reverse geocoding) instead of ids:
+// match the province, then find or create the district and subdistrict under it.
+const areaName = v => str(String(v || '').replace(/^(จังหวัด|อำเภอ|เขต|ตำบล|แขวง)\s*/, ''), 100);
+function resolveArea(b) {
+  let p = int(b.province_id), d = int(b.district_id), s = int(b.subdistrict_id);
+  const a = b.area_names || {};
+  if (!p && a.province) p = db.prepare('SELECT id FROM provinces WHERE name_th = ?').get(areaName(a.province))?.id || null;
+  const dn = areaName(a.district), sn = areaName(a.subdistrict);
+  if (p && !d && dn) {
+    db.prepare('INSERT OR IGNORE INTO districts (province_id, name_th) VALUES (?, ?)').run(p, dn);
+    d = db.prepare('SELECT id FROM districts WHERE province_id = ? AND name_th = ?').get(p, dn).id;
+  }
+  if (d && !s && sn) {
+    db.prepare('INSERT OR IGNORE INTO subdistricts (district_id, name_th) VALUES (?, ?)').run(d, sn);
+    s = db.prepare('SELECT id FROM subdistricts WHERE district_id = ? AND name_th = ?').get(d, sn).id;
+  }
+  return { provinceId: p || null, districtId: d || null, subdistrictId: s || null };
+}
+
 function saveLocation(b, id) {
   const projectId = idParam(b.project_id);
   if (!db.prepare('SELECT 1 FROM relief_projects WHERE id = ?').get(projectId)) throw new HttpError(400, 'ไม่พบโครงการที่เลือก');
-  const provinceId = int(b.province_id), districtId = int(b.district_id), subdistrictId = int(b.subdistrict_id);
+  const { provinceId, districtId, subdistrictId } = resolveArea(b);
   if (districtId && !db.prepare('SELECT 1 FROM districts WHERE id = ? AND province_id = ?').get(districtId, provinceId)) throw new HttpError(400, 'อำเภอไม่ตรงกับจังหวัด');
   if (subdistrictId && !db.prepare('SELECT 1 FROM subdistricts WHERE id = ? AND district_id = ?').get(subdistrictId, districtId)) throw new HttpError(400, 'ตำบลไม่ตรงกับอำเภอ');
   const lat = num(b.lat), lng = num(b.lng);

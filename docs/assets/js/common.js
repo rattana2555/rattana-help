@@ -54,6 +54,20 @@
     ['support', 'รับการสนับสนุน'], ['collect', 'รวบรวมสิ่งของ'], ['prepare', 'จัดเตรียมสิ่งของ'],
     ['transit', 'นำส่งพื้นที่'], ['deliver', 'ส่งมอบให้ผู้ประสบภัย'],
   ];
+  // Project types (keep keys in sync with CATEGORY_KEYS in server.js and apps-script/Code.gs)
+  const CATEGORIES = {
+    flood: { label: 'น้ำท่วม', icon: '🌊' },
+    drought: { label: 'ภัยแล้ง', icon: '☀️' },
+    fire: { label: 'อัคคีภัย', icon: '🔥' },
+    storm: { label: 'วาตภัย', icon: '🌪️' },
+    cold: { label: 'ภัยหนาว', icon: '🧣' },
+    community: { label: 'ช่วยเหลือชุมชน', icon: '🤝' },
+    education: { label: 'การศึกษา', icon: '📚' },
+    health: { label: 'สาธารณสุข', icon: '🩺' },
+    other: { label: 'อื่น ๆ', icon: '💛' },
+  };
+  const category = k => CATEGORIES[k] || CATEGORIES.flood;
+  const catChip = k => { const c = category(k); return `<span class="chip chip-cat"><span class="chip-ic" aria-hidden="true">${c.icon}</span>${esc(c.label)}</span>`; };
   const statusChip = (s, long = false) => {
     const m = STATUS[s] || STATUS.preparing;
     return `<span class="chip chip-${esc(s)}"><span class="chip-ic" aria-hidden="true">${m.icon}</span>${esc(long ? m.long : m.label)}</span>`;
@@ -440,5 +454,5 @@
     });
   }
 
-  window.RH = { api, esc, fmtNum, fmtDate, fmtDateRange, todayISO, areaText, STATUS, STAGES, STEPS, statusChip, locTitle, toast, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG };
+  window.RH = { api, esc, fmtNum, fmtDate, fmtDateRange, todayISO, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, locTitle, toast, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG };
 })();

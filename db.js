@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS relief_projects (
   end_date     TEXT,
   supporters   TEXT,
   is_published INTEGER NOT NULL DEFAULT 1,
+  category     TEXT NOT NULL DEFAULT 'flood',
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -147,6 +148,7 @@ function verifyPassword(pw, stored) {
 function migrate(db) {
   const cols = t => db.prepare(`PRAGMA table_info(${t})`).all().map(c => c.name);
   if (!cols('admins').includes('role')) db.exec("ALTER TABLE admins ADD COLUMN role TEXT NOT NULL DEFAULT 'super'");
+  if (!cols('relief_projects').includes('category')) db.exec("ALTER TABLE relief_projects ADD COLUMN category TEXT NOT NULL DEFAULT 'flood'");
   if (!cols('relief_photos').includes('uploaded_by')) db.exec('ALTER TABLE relief_photos ADD COLUMN uploaded_by INTEGER REFERENCES admins(id) ON DELETE SET NULL');
 }
 
