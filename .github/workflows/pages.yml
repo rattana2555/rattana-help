@@ -56,6 +56,9 @@ jobs:
           if [ "${{ github.event_name }}" != "schedule" ]; then changed=true; fi
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
+      - name: Version asset links (so browsers never mix old and new files)
+        run: sed -i "s/?v=__BUILD__/?v=${GITHUB_SHA::8}/g" docs/index.html docs/admin.html
+
       - if: steps.snap.outputs.changed == 'true'
         uses: actions/configure-pages@v5
 
