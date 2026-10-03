@@ -108,6 +108,10 @@
         <div class="hero-shade"></div>
         <div class="container hero-inner">
           <div class="hero-card glass">
+            <div class="hero-badges-m" aria-hidden="true">
+              <div class="hero-badge m1"><span class="bi">✓</span><span><b>${fmtNum(stats.delivered_locations)} จุด</b><small>ส่งมอบแล้ว</small></span></div>
+              <div class="hero-badge m2"><span class="bi">${icon('users')}</span><span><b>${fmtNum(stats.beneficiaries)} คน</b><small>ได้รับความช่วยเหลือ</small></span></div>
+            </div>
             <span class="hero-tag">${icon('heart')} ${esc(CFG.heroTag || 'โครงการช่วยเหลือ · รัตนไพบูลย์')}</span>
             <h1><span class="gold">${esc(CFG.heroTitle || 'คนละไม้ คนละมือ')}</span><span class="rest">${(CFG.heroSubtitle || ['ส่งต่อกำลังใจและความห่วงใย', 'ให้ผู้ประสบภัยน้ำท่วม']).map(esc).join('<br>')}</span></h1>
             <p class="hero-lead">ร่วมสั่งซื้อสินค้า เพื่อส่งต่อให้ผู้ประสบภัย</p>

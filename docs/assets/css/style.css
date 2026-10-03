@@ -208,17 +208,7 @@ input, select, textarea { font: inherit; font-size: 16px; color: inherit; }
 .hero-sub { margin-top: 8px; color: var(--muted); max-width: 540px; font-size: 15px; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
 @media (max-width: 440px) { .hero-actions .btn { flex: 1 1 100%; } }
-/* Phone: the photo card with its floating badges sits under the text card; the background shows the sky */
-@media (max-width: 899px) {
-  .hero-media { background: url('../img/sky.webp') center top / cover; } /* sky only: the photo itself is in the card below */
-  .hero-media img { display: none; }
-  .hero-inner { gap: 22px; padding-bottom: 110px; }
-  .hero-photo { position: relative; width: calc(100% - 20px); margin: 0 auto; aspect-ratio: 1 / 1.05; }
-  .hero-photo .frame img { object-position: 50% 88%; }
-  .hero-badge { padding: 8px 13px 8px 8px; gap: 8px; border-radius: 16px; background: rgba(255, 255, 255, .93); }
-  .hero-badge b { font-size: 16px; }
-  .hero-badge small { font-size: 11.5px; }
-  .hero-badge .bi { width: 34px; height: 34px; border-radius: 11px; }
+.hero-photo { display: none; }
 }
 @media (min-width: 900px) {
   .hero { min-height: 700px; align-items: center; }
@@ -717,9 +707,9 @@ body.is-map .site-footer { display: none; }
 .line-fab:hover { transform: translateY(-3px) scale(1.03); }
 .line-fab:active { transform: scale(.95); }
 .line-fab .line-ic { width: 32px; height: 32px; color: #fff; }
-.line-fab::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: 0 0 0 0 rgba(6, 199, 85, .55); animation: fabPulse 2.8s ease-out 2s infinite; pointer-events: none; }
+.line-fab::after { content: ''; position: absolute; inset: -2px; border-radius: inherit; border: 2px solid rgba(6, 199, 85, .55); opacity: 0; animation: fabPulse 2.8s ease-out 2s infinite; pointer-events: none; }
 @keyframes fabIn { from { opacity: 0; transform: translateY(30px) scale(.6); } }
-@keyframes fabPulse { 0% { box-shadow: 0 0 0 0 rgba(6, 199, 85, .5); } 70%, 100% { box-shadow: 0 0 0 16px rgba(6, 199, 85, 0); } }
+@keyframes fabPulse { 0% { opacity: .9; transform: scale(1); } 70%, 100% { opacity: 0; transform: scale(1.18, 1.45); } }
 @media (min-width: 900px) { .line-fab { right: 24px; bottom: 24px; height: 54px; font-size: 15px; } }
 body.is-map .line-fab, body.no-scroll .line-fab { display: none; }
 .dcard-line { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding: 10px 12px; border-radius: 16px; background: rgba(6, 199, 85, .08); color: var(--text); font-size: 13.5px; transition: background .2s; }
@@ -757,8 +747,18 @@ body.is-map .line-fab, body.no-scroll .line-fab { display: none; }
   .lchip { background: rgba(255, 255, 255, .95); }
 }
 
-/* Phone badge positions (after the base .hero-badge rules so they win) */
+/* Phone hero: still full-screen photo behind the text card; the two stat badges float on the card's
+   right edge beside the headline (desktop shows them on the photo card instead) */
+.hero-badges-m { display: none; }
 @media (max-width: 899px) {
-  .hero-badge.b1 { left: -6px; top: 8%; }
-  .hero-badge.b2 { right: -6px; bottom: 10%; }
+  .hero-card { position: relative; }
+  .hero-badges-m { display: block; position: absolute; top: 0; right: 0; width: 0; height: 100%; pointer-events: none; }
+  .hero-badges-m .hero-badge { padding: 7px 12px 7px 7px; gap: 8px; border-radius: 16px; background: rgba(255, 255, 255, .96); border: 1px solid rgba(255, 255, 255, .95); box-shadow: 0 12px 26px -10px rgba(19, 32, 99, .45); transform: none; white-space: nowrap; }
+  .hero-badges-m .hero-badge b { font-size: 15px; }
+  .hero-badges-m .hero-badge small { font-size: 11px; }
+  .hero-badges-m .hero-badge .bi { width: 30px; height: 30px; border-radius: 10px; font-size: 14px; }
+  .hero-badges-m .hero-badge .bi .ic { width: 16px; height: 16px; }
+  .hero-badges-m .m1 { right: -12px; left: auto; top: 64px; bottom: auto; }
+  .hero-badges-m .m2 { right: -12px; left: auto; top: 136px; bottom: auto; animation-delay: -3s; }
+  .hero-badges-m .m2 .bi { background: var(--gold-grad); color: var(--indigo-950); }
 }
