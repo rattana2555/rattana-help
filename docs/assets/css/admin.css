@@ -315,3 +315,5 @@ body.ws-mode .adm-main { max-width: none; padding-bottom: 16px; }
 .up-list .up-wait { opacity: .6; }
 .up-list .up-bar { position: absolute; left: 0; bottom: 0; height: 3px; width: 35%; border-radius: 3px; background: var(--gold-grad, linear-gradient(90deg, #FFCF4D, #F5AE0A)); animation: upSlide 1.3s ease-in-out infinite; }
 @keyframes upSlide { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+.miss { display: inline-block; padding: 2px 8px; border-radius: 999px; background: rgba(245, 174, 10, .16); color: #8A5A00; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.clamp1 { display: block; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

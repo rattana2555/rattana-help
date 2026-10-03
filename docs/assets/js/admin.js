@@ -230,7 +230,7 @@
       cols: [
         { key: 'code', label: 'รหัส', cls: 'code', render: r => `#${esc(r.code)}` },
         { key: 'name', label: 'ชื่อจุด', render: r => `<a href="#locations/edit/${r.id}"><b>${esc(r.name)}</b></a><span class="sub">${esc(areaText(r))}</span>` },
-        { key: 'round_no', label: 'รอบ', render: r => `รอบที่ ${esc(r.round_no)}` },
+        { key: 'round_no', label: 'โครงการ / รอบ', render: r => `<a href="#projects/${r.project_id}"><b>รอบที่ ${esc(r.round_no)}</b></a>${r.project_name ? `<span class="sub clamp1" title="${esc(r.project_name)}">${esc(r.project_name)}</span>` : ''}` },
         { key: 'delivery_date', label: 'วันที่ส่งมอบ', type: 'date', render: r => fmtDate(r.delivery_date) },
         { key: 'status', label: 'สถานะ', render: r => statusSelect(r.id, r.status) },
         { key: 'updated_at', label: 'แก้ไขล่าสุด', type: 'date', render: r => `${fmtDate(r.updated_at)} ${esc((r.updated_at || '').slice(11, 16).replace(':', '.'))}` },
@@ -312,7 +312,7 @@
               <span class="pj-top"><b>รอบที่ ${esc(r.round_no)}</b>${statusChip(r.status)}${r.is_published ? '' : '<span class="chip chip-preparing">ซ่อน</span>'}</span>
               <span class="pj-name">${esc(r.name)}</span>
               <span class="pj-sub">${esc(category(r.category).label)} · ${esc(r.provinces || 'ยังไม่มีจุด')} · ${fmtDate(r.start_date)}</span>
-              <span class="pj-stats"><span><b>${r.delivered_count}/${r.location_count}</b> จุดส่งมอบ</span><span><b>${fmtNum(r.beneficiaries)}</b> คน</span><span><b>${fmtNum(r.photo_count)}</b> ภาพ</span></span>
+              <span class="pj-stats"><span><b>${r.delivered_count}/${r.location_count}</b> จุดส่งมอบ</span>${!r.beneficiaries && r.delivered_count ? '<span class="miss" title="จุดที่ส่งมอบแล้วยังไม่ได้ใส่จำนวนผู้ได้รับ">ยังไม่ระบุจำนวนคน</span>' : `<span><b>${fmtNum(r.beneficiaries)}</b> คน</span>`}<span><b>${fmtNum(r.photo_count)}</b> ภาพ</span></span>
             </span>
           </a>
           <div class="pj-acts">
@@ -626,10 +626,10 @@
         { key: 'cover_thumb', label: '', sortable: false, render: r => thumb(r.cover_thumb) },
         { key: 'code', label: 'รหัส', cls: 'code', render: r => `#${esc(r.code)}` },
         { key: 'name', label: 'ชื่อจุด / พื้นที่', render: r => `<a href="#locations/edit/${r.id}"><b>${esc(r.name)}</b></a><span class="sub">${esc(areaText(r))}</span>` },
-        { key: 'round_no', label: 'รอบ', render: r => `รอบที่ ${esc(r.round_no)}` },
+        { key: 'round_no', label: 'โครงการ / รอบ', render: r => `<a href="#projects/${r.project_id}"><b>รอบที่ ${esc(r.round_no)}</b></a>${r.project_name ? `<span class="sub clamp1" title="${esc(r.project_name)}">${esc(r.project_name)}</span>` : ''}` },
         { key: 'delivery_date', label: 'วันที่ส่งมอบ', type: 'date', render: r => fmtDate(r.delivery_date) },
         { key: 'status', label: 'สถานะ', render: r => statusSelect(r.id, r.status) },
-        { key: 'beneficiaries', label: 'ผู้ได้รับ', type: 'num', cls: 'num', render: r => fmtNum(r.beneficiaries) },
+        { key: 'beneficiaries', label: 'ผู้ได้รับ', type: 'num', cls: 'num', render: r => !r.beneficiaries && r.status === 'delivered' ? `<span class="miss" title="ส่งมอบแล้วแต่ยังไม่ได้ใส่จำนวนผู้ได้รับ — กดแก้ไขเพื่อเพิ่ม">ยังไม่ระบุ</span>` : fmtNum(r.beneficiaries) },
         { key: 'photo_count', label: 'ภาพ', type: 'num', cls: 'num' },
         { key: 'actions', label: '', sortable: false, cls: 'actions', render: r => `
           <a class="btn btn-outline btn-sm" href="#locations/edit/${r.id}">${isSuper() ? 'แก้ไข' : 'อัปเดตหน้างาน'}</a>
