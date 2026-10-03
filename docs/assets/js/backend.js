@@ -296,16 +296,20 @@
   on('GET', '/api/stats', async () => stats(await publicData()));
   on('GET', '/api/impact', async () => impact(await publicData()));
   on('GET', '/api/projects', async () => projectAggregates(await publicData()));
-  on('GET', '/api/projects/(\\d+)', async ([id]) => {
-    const db = await publicData();
+  // A shared link can point at something newer than the cached copy: on "not found", fetch live data once more
+  async function fresh(fn) {
+    try { return fn(await publicData()); }
+    catch (e) { if (e.status !== 404 || Date.now() - pubAt < 5000) throw e; return fn(await refreshPublic()); }
+  }
+  on('GET', '/api/projects/(\\d+)', ([id]) => fresh(db => {
     const p = projectAggregates(db).find(x => x.id === +id);
     if (!p) throw new HttpErr(404, 'ไม่พบโครงการ');
     p.locations = clone(sortLocs(db.locations.filter(l => l.project_id === p.id)));
     p.photos = clone(db.photos.filter(x => x.project_id === p.id).sort((a, b) => desc(a.taken_date || a._delivery, b.taken_date || b._delivery) || (a.id - b.id)).slice(0, 24));
     return p;
-  });
+  }));
   on('GET', '/api/locations', async () => clone(sortLocs((await publicData()).locations)));
-  on('GET', '/api/locations/(\\d+)', async ([id]) => locationDetail(await publicData(), +id));
+  on('GET', '/api/locations/(\\d+)', ([id]) => fresh(db => locationDetail(db, +id)));
   on('GET', '/api/photos', async (_, q) => photoQuery(await publicData(), q));
   on('GET', '/api/filters', async () => filters(await publicData()));
   on('GET', '/api/geo/provinces', async () => geo(adm || await publicData()).provinces());

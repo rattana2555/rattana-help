@@ -150,14 +150,36 @@
     try { await Promise.all(['500', '600', '700', '800', '900'].flatMap(w => [document.fonts.load(`${w} 40px "Noto Sans Thai"`, 'กขค'), document.fonts.load(`${w} 40px Inter`, 'Aa1')])); } catch { /* fall back to system fonts */ }
   }
 
+  // Photo slot: one photo, or a mix of 2–4 (the first picked is the big one)
+  const MAX_PICK = 4;
+  function collage(ctx, pics, x, y, w, h, s) {
+    const n = Math.min(pics.length, MAX_PICK), gap = 8 * s, r = 18 * s;
+    if (!n) return;
+    if (n === 1) { drawCover(ctx, pics[0], x, y, w, h, .45); return; }
+    let tiles;
+    if (n === 2) { const h1 = (h - gap) / 2; tiles = [[x, y, w, h1], [x, y + h1 + gap, w, h1]]; }
+    else if (n === 3) { const h1 = (h - gap) * .58, h2 = h - gap - h1, w2 = (w - gap) / 2; tiles = [[x, y, w, h1], [x, y + h1 + gap, w2, h2], [x + w2 + gap, y + h1 + gap, w2, h2]]; }
+    else { const h1 = (h - gap) * .5, w2 = (w - gap) / 2; tiles = [[x, y, w2, h1], [x + w2 + gap, y, w2, h1], [x, y + h1 + gap, w2, h - gap - h1], [x + w2 + gap, y + h1 + gap, w2, h - gap - h1]]; }
+    ctx.fillStyle = 'rgba(255,255,255,.18)'; ctx.fillRect(x, y, w, h); // shows in the gaps
+    tiles.forEach(([tx, ty, tw, th], i) => {
+      ctx.save(); rr(ctx, tx, ty, tw, th, r); ctx.clip();
+      drawCover(ctx, pics[i], tx, ty, tw, th, .45);
+      ctx.restore();
+    });
+  }
+
   // ── the card ──
   async function render(data, fmt) {
     const { w: W, h: H, kind } = fmt;
-    const [photo, logo] = await Promise.all([
-      loadImg(shareSize(data.photo)).then(im => im || loadImg(new URL('assets/img/hero.jpg', location.href).href)),
+    const picked = (data.picked && data.picked.length ? data.picked : [data.photo]).filter(Boolean).slice(0, MAX_PICK);
+    const [loaded, logo] = await Promise.all([
+      Promise.all(picked.map(u => loadImg(shareSize(u)))),
       loadImg(new URL('assets/img/logo.png', location.href).href),
       fontsReady(),
     ]);
+    let pics = loaded.filter(Boolean);
+    if (!pics.length) { const fb = await loadImg(new URL('assets/img/hero.jpg', location.href).href); pics = fb ? [fb] : []; }
+    const photo = pics[0] || null;
     const cv = mk(W, H), ctx = cv.getContext('2d');
     ctx.imageSmoothingQuality = 'high';
 
@@ -217,7 +239,7 @@
     ctx.save(); ctx.shadowColor = 'rgba(0, 8, 40, .45)'; ctx.shadowBlur = 30 * s; ctx.shadowOffsetY = 12 * s;
     rr(ctx, phX, phY, phW, phH, 32 * s); ctx.fillStyle = '#0d1640'; ctx.fill(); ctx.restore();
     ctx.save(); rr(ctx, phX, phY, phW, phH, 32 * s); ctx.clip();
-    if (photo) drawCover(ctx, photo, phX, phY, phW, phH, .45);
+    collage(ctx, pics, phX, phY, phW, phH, s);
     g = ctx.createLinearGradient(0, phY + phH * .6, 0, phY + phH); g.addColorStop(0, 'rgba(8,14,52,0)'); g.addColorStop(1, 'rgba(8,14,52,.55)');
     ctx.fillStyle = g; ctx.fillRect(phX, phY, phW, phH);
     ctx.restore();
@@ -321,6 +343,15 @@
   const siteHost = () => siteBase().replace(/^https?:\/\//, '').replace(/\/$/, '');
 
   // ── data from the public API objects ──
+  // Photos for the picker: cover first, then delivery → after → transit → prepare → collect
+  function photoList(list, coverUrl) {
+    const rank = { deliver: 0, after: 1, transit: 2, prepare: 3, collect: 4 };
+    const seen = new Set();
+    return [...(list || [])]
+      .sort((a, b) => ((b.file_path === coverUrl) - (a.file_path === coverUrl)) || ((rank[a.stage] ?? 9) - (rank[b.stage] ?? 9)))
+      .filter(x => x.file_path && !seen.has(x.file_path) && seen.add(x.file_path))
+      .map(x => ({ full: x.file_path, thumb: x.thumb_path || x.file_path }));
+  }
   function fromLocation(d) {
     const items = (d.items || []).filter(i => i.name).map(i => `${i.name} ${fmtNum(i.quantity)}${i.unit ? ` ${i.unit}` : ''}`).join(' · ');
     const delivered = d.status === 'delivered';
@@ -329,6 +360,7 @@
       title: d.name, round: d.round_no ? `รอบที่ ${d.round_no}` : '', category: d.project_category, status: d.status,
       area: areaText(d, true), date: d.delivery_date ? `${delivered ? 'ส่งมอบ' : 'กำหนดส่งมอบ'} ${fmtDate(d.delivery_date)}` : '', items,
       photo: d.cover_url || (d.photos && d.photos[0] && d.photos[0].file_path),
+      photos: photoList(d.photos, d.cover_url),
       stats: [
         d.beneficiaries ? { v: d.beneficiaries, unit: 'คน', label: delivered ? 'ได้รับความช่วยเหลือ' : 'ผู้รับ (เป้าหมาย)' } : null,
         d.households ? { v: d.households, unit: 'ครัวเรือน', label: 'ครัวเรือนที่ได้รับ' } : null,
@@ -347,6 +379,7 @@
       area: p.provinces ? `จังหวัด${p.provinces}` : '', date: fmtDateRange(p.start_date || p.first_date, p.end_date || p.last_date).replace(/^-$/, ''),
       items: p.summary && p.summary !== p.name ? p.summary : '',
       photo: ph ? ph.file_path : null,
+      photos: photoList(p.photos, ph && ph.file_path),
       stats: [
         p.location_count ? { v: p.delivered_count, unit: `/${fmtNum(p.location_count)} จุด`, label: 'ส่งมอบแล้ว' } : null,
         p.beneficiaries ? { v: p.beneficiaries, unit: 'คน', label: 'ได้รับความช่วยเหลือ' } : null,
@@ -386,6 +419,7 @@
         <div class="shr-head"><div><b>แชร์การช่วยเหลือ</b><small>เลือกขนาดตามที่จะโพสต์</small></div>
           <button type="button" class="shr-x" aria-label="ปิด">${icon('close')}</button></div>
         <div class="shr-tabs" role="tablist">${FORMATS.map(f => `<button type="button" role="tab" data-f="${f.key}" class="app-${f.app}">${APP_ICON[f.app]}<span>${f.label}</span><small>${f.w}×${f.h}</small></button>`).join('')}</div>
+        <div class="shr-pics" hidden><div class="shr-pics-head"><b>ภาพบนการ์ด</b><small>แตะเลือก 1 ภาพ หรือหลายภาพเพื่อมิกซ์ (สูงสุด ${MAX_PICK})</small></div><div class="shr-pics-row"></div></div>
         <div class="shr-stage"><div class="shr-frame"><img alt="ตัวอย่างการ์ดแชร์"><div class="shr-busy"><div class="spinner"></div><span>กำลังสร้างการ์ด…</span></div></div></div>
         <div class="shr-acts">
           <button type="button" class="btn btn-gold shr-go"></button>
@@ -402,11 +436,27 @@
     el.querySelector('.shr-save').onclick = () => save();
     el.querySelector('.shr-copy').onclick = async () => toast(await copyText(caption(cur.data)) ? 'คัดลอกข้อความแล้ว — วางเป็นแคปชันได้เลย' : 'คัดลอกไม่สำเร็จ', 'success');
     el.querySelector('.shr-go').onclick = () => share();
+    el.querySelector('.shr-pics-row').onclick = e => {
+      const b = e.target.closest('[data-pic]'); if (!b) return;
+      const u = cur.data.photos[+b.dataset.pic].full, at = cur.data.picked.indexOf(u);
+      if (at >= 0) { if (cur.data.picked.length === 1) return; cur.data.picked.splice(at, 1); }
+      else { if (cur.data.picked.length >= MAX_PICK) return toast(`เลือกได้สูงสุด ${MAX_PICK} ภาพ`, 'info'); cur.data.picked.push(u); }
+      renderPics(); select(cur.fmt.key);
+    };
+  }
+  function renderPics() {
+    const list = cur.data.photos || [], box = el.querySelector('.shr-pics');
+    box.hidden = list.length < 2;
+    if (box.hidden) return;
+    box.querySelector('.shr-pics-row').innerHTML = list.map((ph, i) => {
+      const n = cur.data.picked.indexOf(ph.full) + 1;
+      return `<button type="button" data-pic="${i}" class="${n ? 'on' : ''}" aria-pressed="${!!n}" aria-label="ภาพที่ ${i + 1}"><img src="${esc(ph.thumb)}" alt="" loading="lazy">${n ? `<span>${n}</span>` : ''}</button>`;
+    }).join('');
   }
   const fmtOf = key => FORMATS.find(f => f.key === key);
   const sizeKey = f => `${f.w}x${f.h}`;
   function blobFor(f) {
-    const k = sizeKey(f);
+    const k = `${sizeKey(f)}|${(cur.data.picked || []).join('|')}`;
     if (!cur.blobs[k]) cur.blobs[k] = render(cur.data, f).then(cv => new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error('toBlob')), 'image/jpeg', .92)));
     return cur.blobs[k];
   }
@@ -451,7 +501,11 @@
   }
   async function open(data, key) {
     if (!el) build();
+    // several photos → start with a mix of up to 3 (cover first); tapping the thumbnails changes it
+    data.photos = data.photos || [];
+    data.picked = data.photos.length ? data.photos.slice(0, Math.min(3, data.photos.length)).map(x => x.full) : [];
     cur = { data, blobs: {}, fmt: null };
+    renderPics();
     el.hidden = false; document.body.classList.add('no-scroll');
     requestAnimationFrame(() => el.classList.add('is-open'));
     el.querySelector('.shr-x').focus({ preventScroll: true });

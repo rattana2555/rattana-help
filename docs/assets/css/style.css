@@ -800,17 +800,29 @@ body.is-map .line-fab, body.no-scroll .line-fab { display: none; }
 .shr-acts .shr-go .ic { width: 20px; height: 20px; }
 .shr-acts .btn { justify-content: center; }
 .shr-acts .shr-save[hidden] + .shr-copy { grid-column: 1 / -1; }
+.shr-pics[hidden] { display: none; }
+.shr-pics-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.shr-pics-head b { font-size: 13.5px; font-weight: 750; color: var(--indigo-900); white-space: nowrap; }
+.shr-pics-head small { font-size: 11.5px; color: var(--muted); text-align: right; }
+.shr-pics-row { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px 6px; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+.shr-pics-row button { position: relative; flex: 0 0 auto; width: 62px; height: 62px; border-radius: 14px; overflow: hidden; border: 2px solid transparent; background: var(--sky-100); opacity: .72; transition: transform .25s var(--ease-spring), opacity .2s, border-color .2s; }
+.shr-pics-row button img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.shr-pics-row button.on { opacity: 1; border-color: var(--gold); box-shadow: 0 6px 14px -6px rgba(245, 174, 10, .9); transform: translateY(-1px); }
+.shr-pics-row button span { position: absolute; top: 4px; right: 4px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; display: grid; place-items: center; font-size: 11.5px; font-weight: 800; color: var(--indigo-900); background: linear-gradient(135deg, #FFE08A, var(--gold)); box-shadow: 0 2px 6px rgba(0, 0, 0, .25); }
 .shr-hint { font-size: 12.5px; color: var(--muted); text-align: center; line-height: 1.5; }
 @media (min-width: 900px) {
   .shr { align-items: center; padding: 24px; }
-  .shr-panel { max-width: 980px; border-radius: 30px; display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: auto auto 1fr auto; column-gap: 24px; padding: 22px 24px; }
+  .shr-panel { max-width: 980px; border-radius: 30px; display: grid; grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: auto auto auto 1fr auto; column-gap: 24px; padding: 22px 24px; }
   .shr-head { grid-column: 2; grid-row: 1; }
-  .shr-stage { grid-column: 1; grid-row: 1 / span 4; padding: 18px; }
+  .shr-stage { grid-column: 1; grid-row: 1 / span 5; padding: 18px; }
+  .shr-pics { grid-column: 2; grid-row: 3; min-width: 0; }
+  .shr-pics-row { flex-wrap: wrap; overflow: visible; }
   .shr-frame { --fh: min(76dvh, 600px); }
   .shr-tabs { grid-column: 2; grid-row: 2; grid-template-columns: 1fr 1fr; }
   .shr-tabs button { flex-direction: row; justify-content: flex-start; gap: 8px; padding: 10px 12px; flex-wrap: wrap; text-align: left; }
   .shr-tabs button small { width: 100%; padding-left: 28px; margin-top: -2px; }
-  .shr-acts { grid-column: 2; grid-row: 3; align-self: end; }
-  .shr-hint { grid-column: 2; grid-row: 4; }
+  .shr-acts { grid-column: 2; grid-row: 4; align-self: end; }
+  .shr-hint { grid-column: 2; grid-row: 5; }
 }
 .dcard .btn-share { padding: 7px 12px; font-size: 13px; }
+@media (max-width: 899px) { .shr-panel:has(.shr-pics:not([hidden])) .shr-frame { --fh: min(44dvh, 500px); } }
