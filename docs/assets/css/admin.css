@@ -120,6 +120,12 @@ body.admin .input { border-radius: 10px; background: var(--surface); color: var(
 .editor-bar .right { display: flex; gap: 8px; }
 .picker-map { height: 300px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
 .picker-map.crosshair .leaflet-container { cursor: crosshair; }
+.area-hint { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); line-height: 1.45; margin: -2px 0 0; }
+.area-hint .ic { width: 15px; height: 15px; flex-shrink: 0; color: var(--sky-500); }
+.area-hint.busy { color: var(--sky-600); }
+.area-hint.ok { color: #1E7A3C; } .area-hint.ok .ic { color: #1E7A3C; }
+.area-hint.warn { color: #B3261E; } .area-hint.warn .ic { color: #B3261E; }
+@media (min-width: 720px) { .form-grid > .picker-map { height: auto; min-height: 340px; } }
 .coord-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .inline-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .items-editor { display: flex; flex-direction: column; gap: 8px; }

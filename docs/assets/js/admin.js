@@ -715,6 +715,7 @@ ${field ? `
               <label class="field"><span>Latitude</span><input class="input" name="lat" inputmode="decimal" value="${L0.lat ?? ''}" placeholder="14.4312"></label>
               <label class="field"><span>Longitude</span><input class="input" name="lng" inputmode="decimal" value="${L0.lng ?? ''}" placeholder="100.1268"></label>
             </div>
+            <p class="area-hint" id="areaHint">${icon('pin')} ปักหมุดบนแผนที่ แล้วจังหวัด / อำเภอ / ตำบลจะเติมให้อัตโนมัติ</p>
             <div class="inline-actions">
               <button type="button" class="btn btn-outline btn-sm" id="btnGeocode">${icon('search')} ค้นหาพิกัดจากพื้นที่</button>
               <button type="button" class="btn btn-outline btn-sm" id="btnGps">${icon('navigation')} ใช้ตำแหน่งปัจจุบัน</button>
@@ -742,6 +743,7 @@ ${field ? `
     const form = $('#locForm');
 
     // Project, area cascade and items are main-admin only
+    let areaUI = null; // area pickers (main admin only), used by the pin auto-fill below
     if (!field) {
     const ssProject = new SearchSelect($('#ssProject'), { value: st.project_id, placeholder: '— เลือกโครงการ —', options: projects.map(p => ({ value: p.id, label: `รอบที่ ${p.round_no} · ${p.name}` })), onChange: v => { st.project_id = Number(v); } });
     // Status
@@ -788,27 +790,63 @@ ${field ? `
       ssSub.setOptions(list.map(d => ({ value: d.id, label: d.name_th })), false); ssSub.setValue(st.subdistrict_id); ssSub.setDisabled(!st.district_id);
     }
     await loadDist();
+    areaUI = { ssProv, loadDist };
     }
 
     // Map picker
     const pm = makeMap($('#pickMap'), { scrollWheelZoom: true });
     onCleanup(() => pm.remove());
-    const setPoint = (lat, lng, pan) => {
+    // auto = the user placed the pin (tap, drag, GPS, typed coordinates): fill จังหวัด/อำเภอ/ตำบล from it
+    const setPoint = (lat, lng, pan, auto) => {
       lat = Math.round(lat * 1e6) / 1e6; lng = Math.round(lng * 1e6) / 1e6;
       form.lat.value = lat; form.lng.value = lng;
       if (!marker) {
         marker = L.marker([lat, lng], { icon: pinIcon(st.status, true), draggable: true }).addTo(pm);
-        marker.on('dragend', () => { const p = marker.getLatLng(); setPoint(p.lat, p.lng, false); });
+        marker.on('dragend', () => { const p = marker.getLatLng(); setPoint(p.lat, p.lng, false, true); });
       } else marker.setLatLng([lat, lng]);
       if (pan) pm.setView([lat, lng], Math.max(pm.getZoom() || 0, 13));
+      if (auto) autoArea(lat, lng);
     };
-    pm.on('click', e => setPoint(e.latlng.lat, e.latlng.lng, false));
+    pm.on('click', e => setPoint(e.latlng.lat, e.latlng.lng, false, true));
     if (L0.lat != null && L0.lng != null) setPoint(L0.lat, L0.lng, true); else pm.setView(CFG.mapCenter, CFG.mapZoom);
-    const onCoord = () => { const la = parseFloat(form.lat.value), ln = parseFloat(form.lng.value); if (isFinite(la) && isFinite(ln) && Math.abs(la) <= 90 && Math.abs(ln) <= 180) setPoint(la, ln, true); };
+    const onCoord = () => { const la = parseFloat(form.lat.value), ln = parseFloat(form.lng.value); if (isFinite(la) && isFinite(ln) && Math.abs(la) <= 90 && Math.abs(ln) <= 180) setPoint(la, ln, true, true); };
     form.lat.onchange = onCoord; form.lng.onchange = onCoord;
+
+    // Reverse-geocode the pin and select the matching จังหวัด/อำเภอ/ตำบล (adding a missing อำเภอ/ตำบล to the list)
+    let areaReq = 0;
+    const areaHint = (msg, cls = '') => { const h = $('#areaHint'); if (h) { h.className = `area-hint ${cls}`; h.innerHTML = `${icon('pin')} ${esc(msg)}`; } };
+    const normName = v => stripArea(v).replace(/\s+/g, '');
+    async function ensureGeo(kind, list, name, parentKey, parentId) {
+      const hit = list.find(x => normName(x.name_th) === normName(name));
+      if (hit) return hit.id;
+      const r = await call(`/api/admin/${kind}`, { method: 'POST', body: { name_th: stripArea(name), [parentKey]: parentId } });
+      geoCache[kind].delete(parentId);
+      return r.id;
+    }
+    async function autoArea(lat, lng) {
+      if (!areaUI) return;
+      const my = ++areaReq;
+      areaHint('กำลังหาจังหวัด / อำเภอ / ตำบลจากหมุด…', 'busy');
+      const g = await reverseGeocode(lat, lng);
+      if (my !== areaReq) return;
+      if (!g || !g.province) return areaHint('หาชื่อพื้นที่จากหมุดไม่ได้ — เลือกเองด้านบน', 'warn');
+      const pv = provs.find(p => normName(p.name_th) === normName(g.province));
+      if (!pv) return areaHint(`ไม่พบจังหวัด “${g.province}” ในระบบ — เลือกเองด้านบน`, 'warn');
+      try {
+        const dId = g.district ? await ensureGeo('districts', await districts(pv.id), g.district, 'province_id', pv.id) : null;
+        const sId = dId && g.subdistrict ? await ensureGeo('subdistricts', await subdistricts(dId), g.subdistrict, 'district_id', dId) : null;
+        if (my !== areaReq) return;
+        st.province_id = pv.id; st.district_id = dId; st.subdistrict_id = sId;
+        areaUI.ssProv.setValue(pv.id);
+        await areaUI.loadDist();
+        const txt = [g.subdistrict && `ต.${g.subdistrict}`, g.district && `อ.${g.district}`, `จ.${pv.name_th}`].filter(Boolean).join(' ');
+        areaHint(`เติมจากหมุดแล้ว: ${txt} — แก้ไขได้ถ้าไม่ตรง`, 'ok');
+      } catch (e) { if (my === areaReq) areaHint('เติมพื้นที่อัตโนมัติไม่สำเร็จ — เลือกเองด้านบน', 'warn'); }
+    }
+
     $('#btnGps').onclick = () => {
       if (!navigator.geolocation) return toast('อุปกรณ์นี้ไม่รองรับการระบุตำแหน่ง', 'warning');
-      navigator.geolocation.getCurrentPosition(p => setPoint(p.coords.latitude, p.coords.longitude, true), () => toast('ไม่สามารถอ่านตำแหน่งได้ — ตรวจสอบการอนุญาตตำแหน่ง', 'error'), { enableHighAccuracy: true, timeout: 10000 });
+      navigator.geolocation.getCurrentPosition(p => setPoint(p.coords.latitude, p.coords.longitude, true, true), () => toast('ไม่สามารถอ่านตำแหน่งได้ — ตรวจสอบการอนุญาตตำแหน่ง', 'error'), { enableHighAccuracy: true, timeout: 10000 });
     };
     if (!field) $('#btnGeocode').onclick = async () => {
       const prov = provs.find(p => p.id === st.province_id)?.name_th;

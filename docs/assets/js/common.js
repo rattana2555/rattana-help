@@ -324,6 +324,14 @@
       }).addTo(map);
     }
     map.attributionControl.setPrefix(false);
+    // Keep Leaflet in step with its box: a map that grows after it was created (grid/flex layouts) otherwise
+    // puts taps and the pin in the wrong place and leaves part of the map blank
+    if (window.ResizeObserver) {
+      let t = 0;
+      const ro = new ResizeObserver(() => { clearTimeout(t); t = setTimeout(() => map.invalidateSize(), 60); });
+      ro.observe(el);
+      map.on('unload', () => { clearTimeout(t); ro.disconnect(); });
+    }
     return map;
   }
   // 3D pin: glossy head + glyph + ground shadow; drops in, bobs (in transit), sonar ring (delivered)
