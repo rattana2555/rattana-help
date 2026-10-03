@@ -7,7 +7,7 @@ body.admin.dark {
 #loadingBar { position: fixed; top: 0; left: 0; height: 3px; width: 0; background: var(--gold); z-index: 10000; transition: width .4s; }
 
 /* ── Login ── */
-.login { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background: linear-gradient(160deg, rgba(243, 249, 255, .25), rgba(19, 32, 99, .55) 70%), url('/assets/img/hero.webp') center 70% / cover; }
+.login { min-height: 100dvh; display: grid; place-items: center; padding: 24px 16px; background: linear-gradient(160deg, rgba(243, 249, 255, .25), rgba(19, 32, 99, .55) 70%), url('../img/hero.webp') center 70% / cover; }
 .login-card { width: 100%; max-width: 390px; background: rgba(255, 255, 255, .78); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); border: 1px solid rgba(255, 255, 255, .9); border-radius: var(--r-lg); padding: 32px 24px 24px; border-top: 4px solid var(--gold); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; gap: 14px; text-align: center; }
 .login-card img { margin: 0 auto; border-radius: 50%; background: #fff; }
 .login-card h1 { font-size: 23px; letter-spacing: .16em; color: var(--indigo-900); font-weight: 850; }

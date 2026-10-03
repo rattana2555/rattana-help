@@ -8,7 +8,7 @@ const { init, tx, hashPassword, verifyPassword, STATUSES, PHOTO_STAGES, TIMELINE
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
-const PUBLIC_DIR = path.join(__dirname, 'public');
+const PUBLIC_DIR = path.join(__dirname, 'docs');
 const SESSION_DAYS = 7;
 const COOKIE = 'rh_admin';
 
@@ -632,7 +632,8 @@ function serveFile(req, res, abs, { cache = 'no-cache', csp = PAGE_CSP } = {}) {
 }
 function serveStatic(req, res, pathname) {
   if (pathname === '/' || pathname === '/index.html') return serveFile(req, res, path.join(PUBLIC_DIR, 'index.html'));
-  if (pathname === '/admin' || pathname === '/admin/' || pathname === '/admin.html') return serveFile(req, res, path.join(PUBLIC_DIR, 'admin.html'));
+  if (pathname === '/admin/') return send(res, 301, '', { Location: '/admin' }); // keep relative asset paths working
+  if (pathname === '/admin' || pathname === '/admin.html') return serveFile(req, res, path.join(PUBLIC_DIR, 'admin.html'));
   if (pathname.startsWith('/uploads/')) {
     const abs = path.normalize(path.join(UPLOAD_DIR, pathname.slice(9)));
     if (!abs.startsWith(UPLOAD_DIR + path.sep)) return send(res, 403, 'Forbidden');

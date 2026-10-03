@@ -1,11 +1,25 @@
-# RATTANA HELP v2.1
+# RATTANA HELP v2.2
 
 ศูนย์กลางแสดงข้อมูลและติดตามการส่งต่อความช่วยเหลือผู้ประสบภัยน้ำท่วม โดยรัตนไพบูลย์
 
 > แอปนี้ **ไม่ใช่ร้านค้า** — ไม่มีตะกร้าสินค้า, Checkout, ระบบชำระเงิน หรือการสั่งซื้อในแอป
-> การสั่งซื้อ/การสนับสนุนเกิดขึ้นผ่านช่องทางภายนอกของรัตนไพบูลย์เท่านั้น (LINE OA `@RPBSALE` ตั้งค่าใน `public/assets/js/config.js` → `lineOa`)
+> การสั่งซื้อ/การสนับสนุนเกิดขึ้นผ่านช่องทางภายนอกของรัตนไพบูลย์เท่านั้น (LINE OA `@RPBSALE` ตั้งค่าใน `docs/assets/js/config.js` → `lineOa`)
 
-## เริ่มใช้งาน
+## โฮสต์บน GitHub Pages (ฟรี — ค่าเริ่มต้น)
+
+| ส่วน | อยู่ที่ |
+|---|---|
+| หน้าเว็บ + หน้า Admin | GitHub Pages จากโฟลเดอร์ `docs/` → `https://rattana2555.github.io/rattana-help/` (Admin: `…/admin.html`) |
+| ข้อมูล | Google Sheets |
+| ภาพ | Google Drive |
+| หลังบ้าน (ล็อกอิน สิทธิ์ บันทึกข้อมูล) | Google Apps Script — โค้ดใน [`apps-script/Code.gs`](apps-script/Code.gs) |
+
+ตั้งค่าครั้งเดียวตาม [`apps-script/SETUP.md`](apps-script/SETUP.md) แล้วใส่ URL ของ Apps Script ใน `docs/assets/js/config.js` → `apiUrl`
+(`docs/assets/js/backend.js` แปลงการเรียก `/api/...` ทั้งหมดของหน้าเว็บไปที่ Apps Script)
+
+## รันบนเครื่อง / เซิร์ฟเวอร์ Node (ทางเลือก)
+
+
 
 ต้องการ **Node.js 22.13 ขึ้นไป** (ใช้ SQLite ที่มากับ Node — ไม่ต้อง `npm install`)
 
@@ -55,21 +69,22 @@ npm start
 
 ## ดีไซน์ v2.0
 
-- โทนสีฟ้า · ขาว · คราม ตัดขอบเหลืองทอง (โทเคนสีอยู่ใน `:root` ของ `public/assets/css/style.css`)
+- โทนสีฟ้า · ขาว · คราม ตัดขอบเหลืองทอง (โทเคนสีอยู่ใน `:root` ของ `docs/assets/css/style.css`)
 - สไตล์ iOS: แถบเมนูกระจกฝ้า, Tab bar ลอย, Bottom sheet, เงาและแสงหลายชั้น
 - ฟอนต์ Inter + Noto Sans Thai
 - โมชั่น: หมุดแผนที่ 3 มิติ (ตกลงมา/ลอย/คลื่นวงแหวน), การ์ดเอียง 3D ตามเมาส์, Scroll reveal, Parallax, เปลี่ยนหน้าแบบนุ่มนวล — ปิดอัตโนมัติเมื่อผู้ใช้ตั้งค่า “ลดการเคลื่อนไหว”
-- ภาพปกหน้าแรก: `public/assets/img/hero.webp` / `hero.jpg` (เปลี่ยนภาพได้โดยแทนที่ไฟล์ชื่อเดิม)
+- ภาพปกหน้าแรก: `docs/assets/img/hero.webp` / `hero.jpg` (เปลี่ยนภาพได้โดยแทนที่ไฟล์ชื่อเดิม)
 
 ## โครงสร้าง
 
 ```
 server.js        HTTP server + REST API (public + admin)
 db.js            Schema, 77 จังหวัด, ข้อมูลตัวอย่าง, รหัสผ่าน (scrypt)
-public/
+docs/            หน้าเว็บ (GitHub Pages เสิร์ฟโฟลเดอร์นี้)
   index.html     เว็บไซต์ (SPA, hash routing)
   admin.html     ระบบ Admin
-  assets/js/     config.js · common.js · app.js · admin.js
+  assets/js/     config.js · common.js · backend.js · app.js · admin.js
+apps-script/     Code.gs (หลังบ้านบน Google) · SETUP.md
   assets/css/    style.css · admin.css
 data/            ฐานข้อมูล SQLite (ไม่ commit)
 uploads/         ภาพที่อัปโหลด (ไม่ commit)
@@ -79,7 +94,7 @@ uploads/         ภาพที่อัปโหลด (ไม่ commit)
 `provinces`, `districts`, `subdistricts`, `admins` (+ `admin_sessions`)
 ความสัมพันธ์: 1 Project → หลาย Locations · 1 Location → หลาย Items / Photos / Updates
 
-## ตั้งค่า (`public/assets/js/config.js`)
+## ตั้งค่า (`docs/assets/js/config.js`)
 
 - `dateEra` — `'BE'` (ค่าเริ่มต้น) แสดง 03/10/2569 หรือ `'CE'` แสดง 03/10/2026
 - `lineOa` — LINE Official Account สำหรับผู้สนับสนุน (ตั้งไว้: `https://lin.ee/XQHHq7M` · `@RPBSALE`) แสดงปุ่มที่หน้าแรก ปุ่มลอย หน้ารายละเอียด การ์ดบนแผนที่ และ footer — เว้น `url` ว่างเพื่อซ่อน

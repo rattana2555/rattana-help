@@ -320,7 +320,7 @@ input, select, textarea { font: inherit; font-size: 16px; color: inherit; }
 .step p { font-size: 13.5px; color: var(--muted); margin-top: 3px; }
 
 .note-band { position: relative; overflow: hidden; isolation: isolate; background: var(--indigo-grad); color: #fff; border-radius: var(--r-lg); padding: 24px; display: flex; flex-direction: column; gap: 16px; box-shadow: var(--shadow-lg); }
-.note-band::before { content: ''; position: absolute; z-index: -1; inset: 0; background: url('/assets/img/sky.webp') center / cover; opacity: .14; mix-blend-mode: screen; }
+.note-band::before { content: ''; position: absolute; z-index: -1; inset: 0; background: url('../img/sky.webp') center / cover; opacity: .14; mix-blend-mode: screen; }
 .note-band::after { content: ''; position: absolute; right: -50px; top: -50px; width: 180px; height: 180px; border-radius: 50%; border: 22px solid rgba(255, 207, 77, .22); }
 .note-band h3 { font-size: 19px; color: var(--gold-2); }
 .note-band p { color: rgba(255, 255, 255, .85); font-size: 14.5px; max-width: 720px; }
@@ -328,7 +328,7 @@ input, select, textarea { font: inherit; font-size: 16px; color: inherit; }
 
 /* ── Page header (inner pages) ── */
 .page-head { position: relative; overflow: hidden; isolation: isolate; color: #fff; padding: 30px 0 36px; border-radius: 0 0 var(--r-xl) var(--r-xl); background: var(--indigo-900); }
-.page-head::before { content: ''; position: absolute; inset: -10% 0 0; z-index: -2; background: url('/assets/img/sky.webp') center 30% / cover; animation: kenburns 30s ease-in-out infinite alternate; }
+.page-head::before { content: ''; position: absolute; inset: -10% 0 0; z-index: -2; background: url('../img/sky.webp') center 30% / cover; animation: kenburns 30s ease-in-out infinite alternate; }
 .page-head::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(120deg, rgba(19, 32, 99, .92) 0%, rgba(41, 64, 168, .78) 50%, rgba(44, 150, 238, .55) 100%); }
 .page-head h1 { font-size: clamp(26px, 6vw, 40px); font-weight: 850; letter-spacing: -.02em; }
 .page-head p { color: rgba(255, 255, 255, .82); margin-top: 6px; max-width: 680px; }

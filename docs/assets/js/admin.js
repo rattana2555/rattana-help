@@ -329,7 +329,7 @@
         { key: 'photo_count', label: 'ภาพ', type: 'num', cls: 'num' },
         { key: 'actions', label: '', sortable: false, cls: 'actions', render: r => `
           <a class="btn btn-outline btn-sm" href="#locations/edit/${r.id}">${isSuper() ? 'แก้ไข' : 'อัปเดตหน้างาน'}</a>
-          <a class="btn btn-ghost-dark btn-sm" href="/#/locations/${r.id}" target="_blank" rel="noopener" title="ดูหน้าเว็บ">${icon('external')}</a>
+          <a class="btn btn-ghost-dark btn-sm" href="./#/locations/${r.id}" target="_blank" rel="noopener" title="ดูหน้าเว็บ">${icon('external')}</a>
           ${isSuper() ? `<button class="btn btn-ghost-dark btn-sm" data-del="${r.id}" aria-label="ลบ">${icon('close')}</button>` : ''}` },
       ],
       onRender: el => {
@@ -372,7 +372,7 @@
       <div class="page-title">
         <div><a class="link-more" href="#locations" style="font-size:13.5px;color:var(--muted)">${icon('back')} จุดช่วยเหลือทั้งหมด</a>
         <h1 style="margin-top:4px">${isNew ? 'เพิ่มจุดช่วยเหลือใหม่' : field ? `อัปเดตหน้างาน #${esc(L0.code)}` : `แก้ไขจุดส่งต่อความช่วยเหลือ #${esc(L0.code)}`}</h1></div>
-        ${!isNew ? `<a class="btn btn-outline btn-sm" href="/#/locations/${lid}" target="_blank" rel="noopener">${icon('external')} ดูหน้าเว็บ</a>` : ''}
+        ${!isNew ? `<a class="btn btn-outline btn-sm" href="./#/locations/${lid}" target="_blank" rel="noopener">${icon('external')} ดูหน้าเว็บ</a>` : ''}
       </div>
       <form id="locForm" novalidate style="display:flex;flex-direction:column;gap:16px">
 ${field ? `

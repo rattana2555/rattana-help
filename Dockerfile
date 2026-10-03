@@ -8,7 +8,7 @@ ENV NODE_ENV=production \
     TRUST_PROXY=1 \
     SEED_DEMO=0
 COPY package.json server.js db.js ./
-COPY public ./public
+COPY docs ./docs
 COPY scripts ./scripts
 # Mount a persistent volume at /data — the database and every uploaded photo live there
 VOLUME ["/data"]

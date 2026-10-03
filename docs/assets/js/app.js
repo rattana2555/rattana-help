@@ -101,8 +101,8 @@
     view.innerHTML = `
       <section class="hero">
         <div class="hero-media" id="heroMedia"><picture>
-          <source srcset="/assets/img/hero.webp" type="image/webp">
-          <img src="/assets/img/hero.jpg" alt="ทีมรัตนไพบูลย์ขนสิ่งของ “ส่งต่อความห่วงใย” ให้ผู้ประสบภัยน้ำท่วม" fetchpriority="high" decoding="async">
+          <source srcset="assets/img/hero.webp" type="image/webp">
+          <img src="assets/img/hero.jpg" alt="ทีมรัตนไพบูลย์ขนสิ่งของ “ส่งต่อความห่วงใย” ให้ผู้ประสบภัยน้ำท่วม" fetchpriority="high" decoding="async">
         </picture></div>
         <div class="hero-shade"></div>
         <div class="container hero-inner">
@@ -118,7 +118,7 @@
             </div>
           </div>
           <div class="hero-photo" data-tilt="7">
-            <div class="frame"><picture><source srcset="/assets/img/hero.webp" type="image/webp"><img src="/assets/img/hero.jpg" alt="" decoding="async"></picture></div>
+            <div class="frame"><picture><source srcset="assets/img/hero.webp" type="image/webp"><img src="assets/img/hero.jpg" alt="" decoding="async"></picture></div>
             <div class="hero-badge b1 glass"><span class="bi">✓</span><span><b>${fmtNum(stats.delivered_locations)} จุด</b><small>ส่งมอบแล้ว</small></span></div>
             <div class="hero-badge b2 glass"><span class="bi">${icon('users')}</span><span><b>${fmtNum(stats.beneficiaries)} คน</b><small>ได้รับความช่วยเหลือ</small></span></div>
           </div>
@@ -457,7 +457,7 @@
 
     view.innerHTML = `
       <section class="dhero">
-        <img src="${esc(d.cover_url || '/assets/img/hero.webp')}" alt="${esc(d.name)}">
+        <img src="${esc(d.cover_url || 'assets/img/hero.webp')}" alt="${esc(d.name)}">
         ${photos.length ? `<button type="button" class="dhero-photos-btn js-all">${icon('image')} ภาพทั้งหมด ${photos.length}</button>` : ''}
         <div class="container">
           <nav class="crumbs" aria-label="breadcrumb"><a href="#/projects">โครงการ</a><span class="sep">›</span><a href="#/projects/${d.project_id}">รอบที่ ${esc(d.round_no)}</a><span class="sep">›</span><span>#${esc(d.code)}</span></nav>
