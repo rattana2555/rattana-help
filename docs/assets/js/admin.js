@@ -121,7 +121,10 @@
   }
 
   // ─────────────── auth ───────────────
+  const ME_KEY = 'rh_admin_me';
+  const rememberMe = m => { try { m ? localStorage.setItem(ME_KEY, JSON.stringify(m)) : localStorage.removeItem(ME_KEY); } catch { /* storage blocked */ } };
   function showLogin(msg) {
+    rememberMe(null);
     $('#appScreen').hidden = true; $('#loginScreen').hidden = false;
     const err = $('#loginError'); err.hidden = !msg; err.textContent = msg || '';
     $('#loginForm [name=username]').focus();
@@ -140,6 +143,7 @@
     try {
       me = await call('/api/admin/login', { method: 'POST', body: { username: f.username.value, password: f.password.value } });
       f.password.value = '';
+      rememberMe(me);
       showApp();
       toast(`ยินดีต้อนรับ ${me.display_name || me.username}`, 'success');
     } catch (err) { $('#loginError').hidden = false; $('#loginError').textContent = err.message; }
@@ -182,10 +186,15 @@
     document.body.classList.remove('editing');
     $$('.adm-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
     const fresh = main.cloneNode(false); main.replaceWith(fresh); main = fresh;
-    main.innerHTML = '<div class="loading" style="min-height:40vh"><div class="spinner"></div></div>';
+    main.innerHTML = `<div class="loading" style="min-height:40vh;flex-direction:column;gap:12px"><div class="spinner"></div>${window.RH.backend === 'apps-script' ? '<p style="color:var(--muted);font-size:13.5px">กำลังโหลดข้อมูลจาก Google…</p>' : ''}</div>`;
     const pages = { overview: pageOverview, projects: parts[1] ? pageProjectWorkspace : pageProjects, locations: parts[1] ? pageLocationEditor : pageLocations, photos: pagePhotos, areas: pageAreas, admins: pageAdmins };
     try { await (pages[tabName] || pageOverview)(id, parts); }
-    catch (e) { if (id === renderId && e.status !== 401) { main.innerHTML = `<div class="empty">${icon('close')}<h3>โหลดข้อมูลไม่สำเร็จ</h3><p>${esc(e.message)}</p></div>`; } }
+    catch (e) {
+      if (id === renderId && e.status !== 401) {
+        main.innerHTML = `<div class="empty">${icon('close')}<h3>โหลดข้อมูลไม่สำเร็จ</h3><p>${esc(e.message)}</p><p style="margin-top:14px"><button class="btn btn-gold" id="retryLoad">${icon('check')} ลองใหม่</button></p></div>`;
+        $('#retryLoad').onclick = () => route();
+      }
+    }
   }
   window.addEventListener('hashchange', route);
 
@@ -1278,8 +1287,27 @@ ${field ? `
   }
 
   // ─────────────── boot ───────────────
+  // Apps Script can take 5–20 s to send the data: show the app right away for a signed-in user (pages show
+  // their own spinner while the data loads) instead of a blank screen, then confirm the session in the background
   (async () => {
-    try { me = await api('/api/admin/me'); showApp(); }
-    catch { showLogin(); }
+    let cached = null;
+    try { if (localStorage.getItem('rh_token')) cached = JSON.parse(localStorage.getItem(ME_KEY) || 'null'); } catch { /* storage blocked */ }
+    let splash = null;
+    if (cached && cached.username) { me = cached; showApp(); }
+    else {
+      splash = document.createElement('div');
+      splash.className = 'loading'; splash.style.cssText = 'min-height:100vh;gap:12px;align-content:center';
+      splash.innerHTML = '<div class="spinner"></div><p style="color:var(--muted);font-size:14px">กำลังเชื่อมต่อระบบหลังบ้าน… (Google อาจใช้เวลาสักครู่)</p>';
+      document.body.appendChild(splash);
+    }
+    try {
+      const m = await api('/api/admin/me');
+      rememberMe(m);
+      if (!cached) { me = m; showApp(); }
+      else if (me && (me.role !== m.role || me.id !== m.id)) { me = m; showApp(); } // role changed meanwhile
+      else if (me) Object.assign(me, m);
+    } catch (e) {
+      if (e.status === 401 || !cached) { rememberMe(null); me = null; showLogin(e.status === 401 || !e.status ? '' : e.message); }
+    } finally { if (splash) splash.remove(); }
   })();
 })();
