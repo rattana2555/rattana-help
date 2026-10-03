@@ -63,22 +63,62 @@
   const charSeg = window.Intl && Intl.Segmenter ? new Intl.Segmenter('th', { granularity: 'grapheme' }) : null;
   const words = t => wordSeg ? Array.from(wordSeg.segment(t), s => s.segment) : Array.from(t);
   const chars = t => charSeg ? Array.from(charSeg.segment(t), s => s.segment) : Array.from(t);
+  // Names that must never be split across lines
+  const KEEP = ['รัตนไพบูลย์', 'RATTANA HELP'];
+  function pieces(chunk) { // word pieces of a chunk too long for one line, protected names kept whole
+    const out = []; let rest = chunk;
+    while (rest) {
+      let at = -1, hit = '';
+      for (const k of KEEP) { const i = rest.indexOf(k); if (i >= 0 && (at < 0 || i < at)) { at = i; hit = k; } }
+      if (at < 0) { out.push(...words(rest)); break; }
+      if (at) out.push(...words(rest.slice(0, at)));
+      out.push(hit); rest = rest.slice(at + hit.length);
+    }
+    return out;
+  }
+  // Inside a long phrase, prefer to break just before words that start a new part of a Thai name or place
+  // ("ลานจอดรถ | บริษัทรัตนไพบูลย์ | ทางเข้าวัดไทร") rather than between any two dictionary words
+  const STARTERS = ['บริษัท', 'ทาง', 'ตำบล', 'อำเภอ', 'จังหวัด', 'หมู่บ้าน', 'หมู่', 'บ้าน', 'วัด', 'โรงเรียน', 'ชุมชน', 'ศาลา', 'ศูนย์', 'สำหรับ', 'ลาน', 'ตลาด', 'โรงพยาบาล', 'มูลนิธิ', 'ร้าน'];
+  function groups(chunk) {
+    const out = [];
+    for (const w of pieces(chunk)) {
+      if (!out.length || STARTERS.some(st => w.startsWith(st))) out.push([w]);
+      else out[out.length - 1].push(w);
+    }
+    return out;
+  }
+  // Break at spaces first (Thai writers put spaces between phrases); only a phrase longer than a whole line
+  // is split — before a name/place word if possible, else between dictionary words, never inside a protected name
   function wrap(ctx, text, maxW, maxLines) {
     const lines = []; let cur = '';
-    const push = () => { lines.push(cur.trim()); cur = ''; };
+    const fits = t => ctx.measureText(t).width <= maxW;
+    const push = () => { if (cur.trim()) lines.push(cur.trim()); cur = ''; };
+    const word = tk => {
+      if (fits(cur + tk)) { cur += tk; return; }
+      push();
+      if (fits(tk)) { cur = tk; return; }
+      for (const ch of chars(tk)) { if (!fits(cur + ch) && cur) push(); cur += ch; }
+    };
+    const piece = grp => {
+      const t = grp.join('');
+      if (fits(cur + t)) { cur += t; return; }
+      if (fits(t)) { push(); cur = t; return; }
+      grp.forEach(word);
+    };
     for (const para of String(text || '').split('\n')) {
-      for (const tk of words(para)) {
-        if (ctx.measureText(cur + tk).width <= maxW) { cur += tk; continue; }
-        if (cur.trim()) push();
-        if (ctx.measureText(tk).width <= maxW) { cur = tk.trimStart(); continue; }
-        for (const ch of chars(tk)) { if (ctx.measureText(cur + ch).width > maxW && cur) push(); cur += ch; }
+      for (const c of para.split(/(\s+)/)) {
+        if (!c) continue;
+        if (/^\s+$/.test(c)) { if (cur) cur += ' '; continue; }
+        if (fits(cur + c)) { cur += c; continue; }
+        if (fits(c)) { push(); cur = c; continue; }
+        groups(c).forEach(piece);
       }
-      if (cur.trim()) push();
+      push();
     }
     if (lines.length <= maxLines) return lines;
     const keep = lines.slice(0, maxLines);
     let last = keep[maxLines - 1];
-    while (last && ctx.measureText(last + '…').width > maxW) last = chars(last).slice(0, -1).join('');
+    while (last && !fits(last + '…')) last = chars(last).slice(0, -1).join('');
     keep[maxLines - 1] = last + '…';
     return keep;
   }
