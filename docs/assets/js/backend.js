@@ -35,22 +35,40 @@
     body: JSON.stringify({ ...payload, action, token: token() }),
   }).then(unwrap);
 
-  // ── datasets ──
-  let pub = null, pubAt = 0, pubLoading = null, adm = null;
-  async function publicData() {
-    if (pub && Date.now() - pubAt < 60_000) return pub;
-    if (!pub) { // instant first paint from the last visit, refreshed below
-      try { const c = JSON.parse(store.get(PUB_KEY) || 'null'); if (c && Date.now() - c.t < 10 * 60_000) { pub = build(c.d, false); pubAt = c.t; refreshPublic(); return pub; } } catch { /* ignore */ }
-    }
-    return refreshPublic();
+  // ── public dataset: never make a visitor wait for Apps Script (1–10 s) ──
+  // 1. returning visitor → last data from localStorage, instantly
+  // 2. first visit → data/snapshot.json published with the site (GitHub Action, every 10 min), ~0.2 s
+  // 3. always → live data from Apps Script in the background; if it differs, 'rh:data-updated' fires
+  let pub = null, pubKey = '', pubAt = 0, pubLoading = null, adm = null;
+  const CACHE_MAX = 7 * 86400_000;
+  function setPub(raw, live) {
+    const { generated_at, ...rest } = raw || {};
+    const key = JSON.stringify(rest);
+    if (live) { pubAt = Date.now(); store.set(PUB_KEY, JSON.stringify({ t: pubAt, d: rest })); }
+    if (key === pubKey) return false;
+    const had = !!pub;
+    pub = build(JSON.parse(key), false);
+    pubKey = key;
+    if (had) window.dispatchEvent(new CustomEvent('rh:data-updated'));
+    return true;
   }
   function refreshPublic() {
-    if (!pubLoading) pubLoading = gasGet('data').then(d => {
-      pub = build(d, false); pubAt = Date.now(); store.set(PUB_KEY, JSON.stringify({ t: pubAt, d }));
-      return pub;
-    }).finally(() => { pubLoading = null; });
+    if (!pubLoading) pubLoading = gasGet('data').then(d => { setPub(d, true); return pub; }).finally(() => { pubLoading = null; });
     return pubLoading;
   }
+  async function publicData() {
+    if (pub) { if (Date.now() - pubAt > 60_000) refreshPublic().catch(() => {}); return pub; }
+    try {
+      const c = JSON.parse(store.get(PUB_KEY) || 'null');
+      if (c && Date.now() - c.t < CACHE_MAX) { setPub(c.d, false); refreshPublic().catch(() => {}); return pub; }
+    } catch { /* ignore */ }
+    const live = refreshPublic();
+    const snap = fetch('data/snapshot.json', { cache: 'no-cache' })
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('no snapshot'))))
+      .then(d => { if (!pub) setPub(d, false); return pub; });
+    return Promise.any([snap, live]).catch(() => live); // whichever arrives first; live error surfaces if both fail
+  }
+
   async function adminData() {
     if (adm) return adm;
     if (!token()) throw new HttpErr(401, 'กรุณาเข้าสู่ระบบ');
@@ -60,7 +78,7 @@
   async function write(action, payload) {
     const r = await gasPost(action, payload);
     adm = build(r.data, true);
-    pub = null; store.set(PUB_KEY, null);
+    pub = null; pubKey = ''; store.set(PUB_KEY, null);
     return r.result;
   }
 
@@ -300,4 +318,6 @@
     throw new HttpErr(404, 'Not found');
   };
   RH.backend = 'apps-script';
+  // Start loading data as soon as possible (public pages only)
+  if (!/admin(\.html)?$/.test(location.pathname)) publicData().catch(() => {});
 })();

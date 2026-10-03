@@ -855,7 +855,9 @@
   ];
   const DEFAULT_TITLE = document.title;
 
-  async function router() {
+  let renderedAt = 0;
+  async function router(soft = false) {
+    if (soft !== true) soft = false; // hashchange passes an Event
     const raw = location.hash.replace(/^#/, '') || '/';
     const [path, query = ''] = raw.split('?');
     const params = new URLSearchParams(query);
@@ -872,12 +874,14 @@
     const fresh = view.cloneNode(false);
     view.replaceWith(fresh);
     view = fresh;
-    fresh.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-    window.scrollTo(0, 0);
+    const keepY = window.scrollY;
+    if (!soft) { fresh.innerHTML = '<div class="loading"><div class="spinner"></div></div>'; window.scrollTo(0, 0); }
     try {
       await fn(id, params, ...(re.exec(path) || []).slice(1).map(Number));
       if (id !== renderId) return;
-      fresh.classList.remove('view-enter'); void fresh.offsetWidth; fresh.classList.add('view-enter');
+      renderedAt = Date.now();
+      if (soft) window.scrollTo(0, keepY);
+      else { fresh.classList.remove('view-enter'); void fresh.offsetWidth; fresh.classList.add('view-enter'); }
       enhance(fresh);
     } catch (e) {
       if (id !== renderId) return;
@@ -890,6 +894,13 @@
     document.querySelector('.site-footer .row')?.insertAdjacentHTML('beforeend', lineBtn({ label: 'LINE ร่วมสนับสนุน', cls: 'btn-sm', showId: true }));
   }
   window.addEventListener('hashchange', router);
+  // Fresher live data arrived (Apps Script) right after this page was drawn from cache/snapshot → redraw quietly.
+  // Later updates wait for the next navigation, so nobody's reading or map selection gets yanked away.
+  window.addEventListener('rh:data-updated', () => {
+    const lb = document.querySelector('.lb');
+    const busy = (lb && !lb.hidden) || document.querySelector('.ss-panel:not([hidden])') || document.querySelector('.sheet.is-detail');
+    if (!busy && Date.now() - renderedAt < 15_000 && window.scrollY < 300) router(true);
+  });
   window.addEventListener('resize', () => document.querySelectorAll('.topnav, .bottomnav').forEach(navIndicator));
   document.fonts?.ready.then(() => document.querySelectorAll('.topnav, .bottomnav').forEach(navIndicator));
   router();

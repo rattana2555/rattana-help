@@ -1,5 +1,5 @@
 /* RATTANA HELP — admin (extends style.css; Rattana company UI standard) */
-body.admin { padding-bottom: 0; font-size: 14.5px; }
+body.admin { padding-bottom: 0; font-size: 14.5px; display: block; }
 body.admin.dark {
   --bg: #0A1020; --surface: #111A35; --text: #E8EAF2; --line: #24305C; --line-2: #1A2547;
   --muted: #94A0C2; --muted-2: #6F7BA0; --gold-soft: rgba(249, 166, 2, .14); --gold-ink: #F9B530;
