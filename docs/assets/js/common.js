@@ -278,12 +278,37 @@
   };
 
   // ── Leaflet helpers ──
+  const webglOK = (() => { let ok = null; return () => { if (ok === null) { try { const c = document.createElement('canvas'); ok = !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { ok = false; } } return ok; }; })();
+  // Vector style tweaks: Thai names first (never on route-number shields), sky-blue water to match the theme
+  function tuneStyle(gl) {
+    const style = gl.getStyle();
+    if (!style) return;
+    style.layers.forEach(l => {
+      const tf = l.layout && l.layout['text-field'] && JSON.stringify(l.layout['text-field']);
+      if (tf && /name/.test(tf) && !/ref/.test(tf)) gl.setLayoutProperty(l.id, 'text-field', ['coalesce', ['get', 'name:th'], ['get', 'name'], ['get', 'name_en']]);
+      if (/water/.test(l.id) && l.type === 'fill') gl.setPaintProperty(l.id, 'fill-color', '#CFE6FB');
+      if (/waterway/.test(l.id) && l.type === 'line') gl.setPaintProperty(l.id, 'line-color', '#B6D9F7');
+    });
+  }
   function makeMap(el, opts = {}) {
-    const map = L.map(el, Object.assign({ zoomControl: true, attributionControl: true, scrollWheelZoom: true }, opts));
-    L.tileLayer(CFG.tileUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: CFG.tileAttribution || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    }).addTo(map);
+    const map = L.map(el, Object.assign({ zoomControl: true, attributionControl: true, scrollWheelZoom: true, maxZoom: 19 }, opts));
+    if (CFG.mapStyle && window.maplibregl && L.maplibreGL && webglOK()) {
+      // Vector map: text is drawn live, so it stays sharp at every zoom level and on high-DPI phones
+      const layer = L.maplibreGL({ style: CFG.mapStyle, attribution: CFG.mapStyleAttribution || '' }).addTo(map);
+      el.classList.add('map-vector');
+      // The GL map only exists once Leaflet has a view (layers added earlier are queued until then)
+      map.whenReady(() => {
+        const gl = layer.getMaplibreMap && layer.getMaplibreMap();
+        if (!gl) return;
+        const tune = () => { try { tuneStyle(gl); } catch { /* style differs: keep defaults */ } };
+        gl.isStyleLoaded() ? tune() : gl.once('style.load', tune);
+      });
+    } else {
+      L.tileLayer(CFG.tileUrl || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: CFG.tileAttribution || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }).addTo(map);
+    }
     map.attributionControl.setPrefix(false);
     return map;
   }

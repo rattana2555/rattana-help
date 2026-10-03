@@ -1,6 +1,6 @@
 // RATTANA HELP — site settings (edit here, no rebuild needed)
 window.RH_CONFIG = {
-  version: '2.2',
+  version: '2.3',
   // Google Apps Script web app URL (…/exec) — the data backend when hosted on GitHub Pages.
   // See apps-script/SETUP.md. Leave empty only when running the Node server (npm start).
   apiUrl: 'https://script.google.com/macros/s/AKfycbwMY9VNDGlHMZmz87_XaYful8BxJtzyvS0gSccHPlIhaj8tru1D0I8MI-mM0FFolBo5/exec',
@@ -18,7 +18,10 @@ window.RH_CONFIG = {
   // Default map view (Central Thailand)
   mapCenter: [14.1, 100.3],
   mapZoom: 8,
-  // Map tiles. OpenStreetMap's free tiles suit low traffic; for heavy production traffic switch to a
+  // Crisp vector map (sharp text at every zoom and on high-DPI phones). Free, no API key: openfreemap.org
+  mapStyle: 'https://tiles.openfreemap.org/styles/positron',
+  mapStyleAttribution: '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> &copy; <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+  // Fallback raster tiles (devices without WebGL). OpenStreetMap's free tiles suit low traffic; for heavy production traffic switch to a
   // keyed provider (e.g. MapTiler / Stadia) and add its domain to img-src in server.js PAGE_CSP.
   tileUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   tileAttribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
