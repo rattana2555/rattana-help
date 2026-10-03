@@ -23,7 +23,13 @@
     if (!j.ok) { if (j.status === 401) store.set(TOKEN_KEY, null); throw new HttpErr(j.status || 500, j.error || 'เกิดข้อผิดพลาด'); }
     return j.data;
   }
-  const gasGet = action => fetch(`${CFG.apiUrl}?action=${encodeURIComponent(action)}`).then(unwrap);
+  // Reads retry: Apps Script now and then answers with a temporary HTML error page instead of JSON
+  async function gasGet(action, tries = 3) {
+    for (let i = 1; ; i++) {
+      try { return await fetch(`${CFG.apiUrl}?action=${encodeURIComponent(action)}`).then(unwrap); }
+      catch (e) { if (i >= tries || (e.status && e.status < 500)) throw e; await new Promise(r => setTimeout(r, 700 * i)); }
+    }
+  }
   const gasPost = (action, payload = {}) => fetch(CFG.apiUrl, {
     method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ ...payload, action, token: token() }),
