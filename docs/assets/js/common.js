@@ -18,6 +18,23 @@
   // ── Formatting ──
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fmtNum = n => (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  // ── Items counted in pieces ──
+  // Units come from the product sheet, e.g. "แพ็คx12(CS)" = a pack of 12 → 1 แพ็ค counts as 12 pieces.
+  // Older items typed by hand ("น้ำดื่ม (แพ็ค 12 ขวด)" · unit "แพ็ค") take the number from the name.
+  const PACK = /^(แพ็ค|แพค|ลัง|หีบ|โหล|กล่อง|ถาด|กระสอบ|มัด|ห่อ|ถุง|ชุด)/;
+  function perUnit(unit, name) {
+    const u = String(unit || '');
+    const m = /x\s*(\d+)/i.exec(u);
+    if (m) return Math.max(1, +m[1]);
+    if (PACK.test(u.trim())) {
+      const n = /(\d+)\s*(ขวด|ชิ้น|ซอง|กล่อง|กระป๋อง|ห่อ|ถุง|ลูก|ใบ|ม้วน|แท่ง|ก้อน)\s*\)?\s*$/.exec(String(name || ''));
+      if (n) return Math.max(1, +n[1]);
+    }
+    return 1;
+  }
+  const pieces = (qty, unit, name) => (Number(qty) || 0) * perUnit(unit, name);
+  /** "แพ็คx12(CS)" → "แพ็ค" (for display) */
+  const unitName = u => String(u || '').replace(/\s*(x\s*\d.*|\(.*\))$/i, '').trim();
   function fmtDate(s) {
     if (!s) return '-';
     const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s));
@@ -465,5 +482,5 @@
     });
   }
 
-  window.RH = { api, esc, fmtNum, fmtDate, fmtDateRange, todayISO, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, locTitle, toast, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG };
+  window.RH = { api, esc, fmtNum, pieces, perUnit, unitName, fmtDate, fmtDateRange, todayISO, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, locTitle, toast, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG };
 })();

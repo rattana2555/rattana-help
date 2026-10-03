@@ -1,7 +1,7 @@
 // RATTANA HELP — Admin dashboard
 (function () {
   'use strict';
-  const { api, esc, fmtNum, fmtDate, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, icon, SearchSelect, Lightbox, makeMap, pinIcon, setPinSelected, toast, todayISO, CFG } = window.RH;
+  const { api, esc, fmtNum, pieces, unitName, fmtDate, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, icon, SearchSelect, Lightbox, makeMap, pinIcon, setPinSelected, toast, todayISO, CFG } = window.RH;
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   let main = $('#adm');
@@ -15,6 +15,65 @@
   const STATUS_KEYS = ['preparing', 'in_transit', 'delivered'];
   const COMMON_ITEMS = ['น้ำดื่ม (แพ็ค 12 ขวด)', 'ข้าวสาร 5 กก.', 'อาหารแห้ง', 'บะหมี่กึ่งสำเร็จรูป', 'ปลากระป๋อง', 'ถุงยังชีพ', 'ของใช้จำเป็น', 'ยาสามัญประจำบ้าน', 'ผ้าห่ม', 'นมกล่อง', 'ผ้าอนามัย', 'แพมเพิส'];
   const COMMON_UNITS = ['แพ็ค', 'ถุง', 'ชุด', 'ลัง', 'ขวด', 'กล่อง', 'ผืน', 'ชิ้น', 'กระสอบ'];
+
+  // ── Item rows: product search + pieces ──
+  // data/products.json (built by the deploy workflow from the product sheet: names + units only) lets the team
+  // pick a real product; its unit such as "แพ็คx12(CS)" makes 1 แพ็ค count as 12 pieces everywhere.
+  let productsP = null;
+  const loadProducts = () => (productsP ||= fetch('data/products.json', { cache: 'no-cache' })
+    .then(r => (r.ok ? r.json() : { products: [] })).then(j => j.products || []).catch(() => []));
+  const findProduct = (list, name) => list.find(p => p[0] === String(name || '').trim());
+  function searchProducts(list, q) {
+    const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const hits = [];
+    for (const p of list) {
+      const n = p[0].toLowerCase();
+      if (words.every(w => n.includes(w))) { hits.push(p); if (hits.length >= 40) break; }
+    }
+    return hits.sort((a, b) => (b[0].toLowerCase().startsWith(words[0]) - a[0].toLowerCase().startsWith(words[0])) || a[0].length - b[0].length).slice(0, 25);
+  }
+  /** "= 960 ชิ้น" under a row when one unit holds several pieces */
+  const pcsHint = it => {
+    const q = parseFloat(it.quantity) || 0, p = pieces(q, it.unit, it.name);
+    return q && p !== q ? `= ${fmtNum(p)} ชิ้น` : '';
+  };
+  /** One item row (shared by the point editor and the map quick form) */
+  const itemRowHtml = (it, i, scope) => `<div class="item-row" data-i="${i}">
+    <input class="input" list="${scope}-names" data-k="name" value="${esc(it.name)}" placeholder="ชื่อสิ่งของ (พิมพ์ค้นหาสินค้า)" aria-label="ชื่อสิ่งของ" autocomplete="off">
+    <input class="input" type="number" min="0" step="any" inputmode="decimal" data-k="quantity" value="${it.quantity ?? ''}" placeholder="จำนวน" aria-label="จำนวน">
+    <input class="input" list="${scope}-u${i}" data-k="unit" value="${esc(it.unit || '')}" placeholder="หน่วย" aria-label="หน่วย" autocomplete="off">
+    <button type="button" class="btn btn-ghost-dark btn-icon" data-rm="${i}" aria-label="ลบรายการ">${icon('close')}</button>
+    <datalist id="${scope}-u${i}">${COMMON_UNITS.map(u => `<option value="${esc(u)}">`).join('')}</datalist>
+    <small class="pcs-hint">${pcsHint(it)}</small></div>`;
+  /** Wire product search, unit suggestions and the pieces hint on an items container */
+  function itemAssist(box, scope, rows, onChange) {
+    if (!box.parentElement.querySelector(`#${scope}-names`)) box.insertAdjacentHTML('beforebegin', `<datalist id="${scope}-names">${COMMON_ITEMS.map(n => `<option value="${esc(n)}">`).join('')}</datalist>`);
+    const names = box.parentElement.querySelector(`#${scope}-names`);
+    loadProducts();
+    box.addEventListener('input', async e => {
+      const row = e.target.closest('[data-i]'); if (!row) return;
+      const it = rows()[+row.dataset.i]; if (!it) return;
+      const k = e.target.dataset.k;
+      if (k === 'name') {
+        const list = await loadProducts();
+        const hits = searchProducts(list, e.target.value);
+        names.innerHTML = (hits.length ? hits.map(p => p[0]) : COMMON_ITEMS).map(n => `<option value="${esc(n)}">`).join('');
+        const p = findProduct(list, e.target.value);
+        if (p) {
+          const units = p[1].split('|');
+          row.querySelector('datalist').innerHTML = units.map(u => `<option value="${esc(u)}">`).join('');
+          const unitIn = row.querySelector('[data-k="unit"]');
+          // keep a unit the team already chose if it matches this product, else pick its pack/case unit
+          const cur = units.find(u => unitName(u) === unitName(unitIn.value));
+          const pick = cur || units.find(u => !/^ชิ้น/.test(u)) || units[0];
+          if (pick && unitIn.value !== pick) { unitIn.value = pick; it.unit = pick; }
+        }
+      }
+      row.querySelector('.pcs-hint').textContent = pcsHint(it);
+      onChange && onChange();
+    });
+  }
 
   // ─────────────── infra ───────────────
   const setLoading = on => { $('#loadingBar').style.width = on ? '85%' : '0'; };
@@ -470,7 +529,7 @@
             <label class="field"><span>ผู้ได้รับ (คน)</span><input class="input" type="number" min="0" inputmode="numeric" name="beneficiaries" value="0"></label>
           </div>
           <div class="field"><span>สถานะ</span><div class="seg-ctl" id="fStatus">${STATUS_KEYS.map(k => `<button type="button" data-v="${k}" class="${k === 'preparing' ? 'on' : ''}">${STATUS[k].icon} ${STATUS[k].label}</button>`).join('')}</div></div>
-          <div class="field"><span>สิ่งของ <span class="hint">(เพิ่มทีหลังได้)</span></span><datalist id="wsItems">${COMMON_ITEMS.map(i => `<option value="${esc(i)}">`).join('')}</datalist><datalist id="wsUnits">${COMMON_UNITS.map(i => `<option value="${esc(i)}">`).join('')}</datalist>
+          <div class="field"><span>สิ่งของ <span class="hint">(พิมพ์ค้นหาสินค้า · เพิ่มทีหลังได้)</span></span>
             <div class="items-editor" id="fItems"></div><button type="button" class="btn btn-ghost-dark btn-sm" id="fAddItem" style="align-self:flex-start">${icon('plus')} เพิ่มรายการ</button></div>
           <div class="ws-form-acts"><button type="button" class="btn btn-outline" id="fCancel">ยกเลิก</button><button type="submit" class="btn btn-gold" id="fSave">${icon('check')} บันทึกจุด</button></div>
         </form>`;
@@ -481,14 +540,11 @@
       onCleanup(() => ssProv.destroy());
       f._ssProv = ssProv;
       const drawItems = () => {
-        $('#fItems').innerHTML = items.map((it, i) => `<div class="item-row" data-i="${i}">
-          <input class="input" list="wsItems" data-k="name" value="${esc(it.name)}" placeholder="ชื่อสิ่งของ" aria-label="ชื่อสิ่งของ">
-          <input class="input" type="number" min="0" step="any" inputmode="decimal" data-k="quantity" value="${it.quantity ?? ''}" placeholder="จำนวน" aria-label="จำนวน">
-          <input class="input" list="wsUnits" data-k="unit" value="${esc(it.unit || '')}" placeholder="หน่วย" aria-label="หน่วย">
-          <button type="button" class="btn btn-ghost-dark btn-icon" data-rm="${i}" aria-label="ลบรายการ">${icon('close')}</button></div>`).join('');
+        $('#fItems').innerHTML = items.map((it, i) => itemRowHtml(it, i, 'ws')).join('');
       };
       drawItems();
       $('#fItems').addEventListener('input', e => { const r = e.target.closest('[data-i]'); if (r) items[+r.dataset.i][e.target.dataset.k] = e.target.value; });
+      itemAssist($('#fItems'), 'ws', () => items);
       $('#fItems').addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (b) { items.splice(+b.dataset.rm, 1); if (!items.length) items.push({ name: '', quantity: '', unit: '' }); drawItems(); } });
       $('#fAddItem').onclick = () => { items.push({ name: '', quantity: '', unit: '' }); drawItems(); };
       $('#fStatus').onclick = e => { const t = e.target.closest('[data-v]'); if (!t) return; status = t.dataset.v; $$('#fStatus button').forEach(b => b.classList.toggle('on', b === t)); temp && temp.setIcon(pinIcon(status, true)); };
@@ -735,7 +791,7 @@ ${field ? `
         </div></div></section>
 
         <section class="acard"><div class="acard-head"><h2>${icon('box')} รายการสิ่งของที่ส่งมอบ</h2><button type="button" class="btn btn-outline btn-sm" id="addItem">${icon('plus')} เพิ่มรายการ</button></div>
-          <div class="acard-body"><datalist id="itemNames">${COMMON_ITEMS.map(i => `<option value="${esc(i)}">`).join('')}</datalist><datalist id="itemUnits">${COMMON_UNITS.map(i => `<option value="${esc(i)}">`).join('')}</datalist>
+          <div class="acard-body"><p class="items-help">พิมพ์ชื่อสินค้าเพื่อค้นหา แล้วเลือกหน่วยตามสินค้า (เช่น แพ็คx12) — ระบบนับเป็นจำนวนชิ้นให้อัตโนมัติ</p>
           <div class="items-editor" id="items"></div><div class="items-total" style="margin-top:10px"><span>รวมจำนวนสิ่งของ</span><b id="itemsTotal">0</b></div></div></section>
 `}
 
@@ -879,16 +935,13 @@ ${field ? `
     const itemsEl = $('#items');
     const renderItems = () => {
       if (!st.items.length) st.items.push({ name: '', quantity: '', unit: '' });
-      itemsEl.innerHTML = st.items.map((it, i) => `<div class="item-row" data-i="${i}">
-        <input class="input" list="itemNames" data-k="name" value="${esc(it.name)}" placeholder="ชื่อสิ่งของ" aria-label="ชื่อสิ่งของ">
-        <input class="input" type="number" min="0" step="any" inputmode="decimal" data-k="quantity" value="${it.quantity ?? ''}" placeholder="จำนวน" aria-label="จำนวน">
-        <input class="input" list="itemUnits" data-k="unit" value="${esc(it.unit || '')}" placeholder="หน่วย" aria-label="หน่วย">
-        <button type="button" class="btn btn-ghost-dark btn-icon" data-rm="${i}" aria-label="ลบรายการ">${icon('close')}</button></div>`).join('');
+      itemsEl.innerHTML = st.items.map((it, i) => itemRowHtml(it, i, 'li')).join('');
       updTotal();
     };
-    const updTotal = () => { $('#itemsTotal').textContent = fmtNum(st.items.reduce((s, i) => s + (parseFloat(i.quantity) || 0), 0)); };
+    const updTotal = () => { $('#itemsTotal').textContent = `${fmtNum(st.items.reduce((s, i) => s + pieces(parseFloat(i.quantity) || 0, i.unit, i.name), 0))} ชิ้น`; };
     itemsEl.addEventListener('input', e => { const row = e.target.closest('[data-i]'); if (!row) return; st.items[+row.dataset.i][e.target.dataset.k] = e.target.value; updTotal(); });
     itemsEl.addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (!b) return; st.items.splice(+b.dataset.rm, 1); renderItems(); });
+    itemAssist(itemsEl, 'li', () => st.items, () => updTotal());
     $('#addItem').onclick = () => { st.items.push({ name: '', quantity: '', unit: '' }); renderItems(); $$('#items .item-row:last-child input')[0].focus(); };
     renderItems();
     }

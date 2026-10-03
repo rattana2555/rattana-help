@@ -129,8 +129,9 @@ body.admin .input { border-radius: 10px; background: var(--surface); color: var(
 .coord-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .inline-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .items-editor { display: flex; flex-direction: column; gap: 8px; }
-.item-row { display: grid; grid-template-columns: 1fr 96px 84px 36px; gap: 6px; align-items: center; }
-@media (max-width: 520px) { .item-row { grid-template-columns: 1fr 76px 64px 36px; } }
+.item-row { display: grid; grid-template-columns: 1fr 96px 136px 36px; gap: 6px; align-items: center; }
+/* phones: product name gets its own line, then quantity · unit · remove */
+@media (max-width: 620px) { .item-row { grid-template-columns: 1fr 1.3fr 36px; } .item-row [data-k="name"] { grid-column: 1 / -1; } }
 .item-row .input { min-height: 40px; }
 .items-total { display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 13.5px; color: var(--muted); }
 .items-total b { color: var(--text); }
@@ -296,7 +297,8 @@ body.ws-mode .adm-main { max-width: none; padding-bottom: 16px; }
 .ws-form-head small { font-size: 11.5px; color: var(--muted-2); font-variant-numeric: tabular-nums; }
 .ws-area { display: grid; grid-template-columns: 1fr; gap: 6px; }
 .ws-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.ws-form .item-row { grid-template-columns: 1fr 70px 62px 34px; }
+.ws-form .item-row { grid-template-columns: 1fr 1.3fr 34px; }
+.ws-form .item-row [data-k="name"] { grid-column: 1 / -1; }
 .ws-form-acts { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; position: sticky; bottom: -18px; background: var(--surface); padding: 10px 0 4px; }
 .ws-point h3 { font-size: 17px; color: var(--text); margin-top: 6px; }
 .ws-area-tx { font-size: 13px; color: var(--muted); margin: 2px 0 10px; display: flex; gap: 4px; align-items: center; }
@@ -317,3 +319,6 @@ body.ws-mode .adm-main { max-width: none; padding-bottom: 16px; }
 @keyframes upSlide { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 .miss { display: inline-block; padding: 2px 8px; border-radius: 999px; background: rgba(245, 174, 10, .16); color: #8A5A00; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .clamp1 { display: block; max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-row .pcs-hint { grid-column: 1 / -1; margin: -2px 0 2px 4px; font-size: 12px; font-weight: 700; color: var(--gold-ink, #9A6700); }
+.item-row .pcs-hint:empty { display: none; }
+.items-help { font-size: 12.5px; color: var(--muted); margin: -4px 0 10px; }

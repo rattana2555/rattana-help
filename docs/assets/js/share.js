@@ -393,7 +393,7 @@
       .map(x => ({ full: x.file_path, thumb: x.thumb_path || x.file_path }));
   }
   function fromLocation(d) {
-    const items = (d.items || []).filter(i => i.name).map(i => `${i.name} ${fmtNum(i.quantity)}${i.unit ? ` ${i.unit}` : ''}`).join(' · ');
+    const items = (d.items || []).filter(i => i.name).map(i => `${i.name} ${fmtNum(i.quantity)}${i.unit ? ` ${window.RH.unitName(i.unit)}` : ''}`).join(' · ');
     const delivered = d.status === 'delivered';
     return {
       id: `loc-${d.id}`, eyebrow: delivered ? 'ส่งต่อความช่วยเหลือแล้ว' : 'กำลังส่งต่อความช่วยเหลือ',

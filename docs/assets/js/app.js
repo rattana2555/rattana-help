@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const { ShareCard } = window.RH;
-  const { api, esc, fmtNum, fmtDate, fmtDateRange, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, locTitle, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG } = window.RH;
+  const { api, esc, fmtNum, pieces, unitName, fmtDate, fmtDateRange, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, locTitle, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG } = window.RH;
   let view = document.getElementById('view');
   let cleanups = [];
   let renderId = 0;
@@ -22,6 +22,11 @@
     ? `<img src="${esc(src)}" alt="${esc(alt)}" loading="lazy" decoding="async"${cls ? ` class="${cls}"` : ''}>`
     : `<div class="ph-empty">${icon('image')}</div>`;
   const emptyState = (title, text, ic = 'image') => `<div class="empty">${icon(ic)}<h3>${esc(title)}</h3><p>${esc(text)}</p></div>`;
+  /** "80 แพ็ค · 960 ชิ้น" — pieces shown when one unit holds several */
+  const qtyText = (q, unit, name) => {
+    const p = pieces(q, unit, name), u = unitName(unit);
+    return p !== (Number(q) || 0) ? `${fmtNum(q)} ${esc(u)} · ${fmtNum(p)} ชิ้น` : `${fmtNum(q)} ${esc(u)}`;
+  };
   const unitLabel = l => l.status === 'delivered' ? 'วันที่ส่งมอบ' : 'กำหนดส่งมอบ';
 
   // ─────────────── shared blocks ───────────────
@@ -434,7 +439,7 @@
         <li><span class="em">📍</span><div><div class="k">พื้นที่</div><div class="v">${areaLines(d)}</div></div></li>
         <li><span class="em">📅</span><div><div class="k">${unitLabel(d)}</div><div class="v">${fmtDate(d.delivery_date)}</div></div></li>
         <li><span class="em">📦</span><div><div class="k">สิ่งของที่ส่งมอบ</div>
-          ${d.items.length ? `<ul class="item-list">${d.items.map(i => `<li><span>${esc(i.name)}</span><b>${fmtNum(i.quantity)} ${esc(i.unit || '')}</b></li>`).join('')}</ul>` : '<div class="v">-</div>'}</div></li>
+          ${d.items.length ? `<ul class="item-list">${d.items.map(i => `<li><span>${esc(i.name)}</span><b>${qtyText(i.quantity, i.unit, i.name)}</b></li>`).join('')}</ul>` : '<div class="v">-</div>'}</div></li>
         <li><span class="em">👥</span><div><div class="k">จำนวนผู้ได้รับความช่วยเหลือ${d.status === 'delivered' ? '' : ' (เป้าหมาย)'}</div><div class="v big">${fmtNum(d.beneficiaries)} คน</div></div></li>
         <li><span class="em">${d.status === 'delivered' ? '✅' : STATUS[d.status].icon}</span><div><div class="k">สถานะ</div><div class="v">${statusChip(d.status, true)}</div></div></li>
       </ul>
@@ -491,7 +496,7 @@
 
             <div class="card card-pad">
               <h3 class="card-title">${icon('box')} สิ่งของที่ส่งมอบ</h3>
-              ${d.items.length ? `<table class="items-table"><tbody>${d.items.map(i => `<tr><td><span class="dot"></span>${esc(i.name)}</td><td class="q">${fmtNum(i.quantity)}<small>${esc(i.unit || '')}</small></td></tr>`).join('')}</tbody></table>` : '<p class="txt-muted">ยังไม่มีรายการสิ่งของ</p>'}
+              ${d.items.length ? `<table class="items-table"><tbody>${d.items.map(i => `<tr><td><span class="dot"></span>${esc(i.name)}</td><td class="q">${fmtNum(i.quantity)}<small>${esc(unitName(i.unit))}${pieces(i.quantity, i.unit, i.name) !== (i.quantity || 0) ? ` · ${fmtNum(pieces(i.quantity, i.unit, i.name))} ชิ้น` : ''}</small></td></tr>`).join('')}</tbody></table>` : '<p class="txt-muted">ยังไม่มีรายการสิ่งของ</p>'}
             </div>
 
             <div class="card card-pad">
@@ -808,7 +813,7 @@
     const st = s.status;
     const pct = k => st.total ? (st[k] / st.total * 100) : 0;
     const maxProv = Math.max(1, ...d.byProvince.map(p => p.beneficiaries));
-    const maxItem = Math.max(1, ...d.byItem.map(i => i.quantity));
+    const maxItem = Math.max(1, ...d.byItem.map(i => i.pieces ?? i.quantity));
     const updated = s.updated_at ? fmtDate(s.updated_at.slice(0, 10)) : null;
 
     view.innerHTML = `
@@ -855,8 +860,8 @@
           <div class="card card-pad">
             <h3 class="card-title">${icon('box')} สิ่งของที่ส่งต่อแล้ว</h3>
             ${d.byItem.length ? `<ul class="bars">${d.byItem.map(i => `
-              <li class="bar-row"><div class="top"><span>${esc(i.name)}</span><b>${fmtNum(i.quantity)} ${esc(i.unit || '')}</b></div>
-              <div class="bar gold"><i style="--w:${i.quantity / maxItem * 100}%"></i></div></li>`).join('')}</ul>` : emptyState('ยังไม่มีการส่งมอบ', 'ข้อมูลจะแสดงเมื่อมีการส่งมอบ', 'box')}
+              <li class="bar-row"><div class="top"><span>${esc(i.name)}</span><b>${qtyText(i.quantity, i.unit, i.name)}</b></div>
+              <div class="bar gold"><i style="--w:${(i.pieces ?? i.quantity) / maxItem * 100}%"></i></div></li>`).join('')}</ul>` : emptyState('ยังไม่มีการส่งมอบ', 'ข้อมูลจะแสดงเมื่อมีการส่งมอบ', 'box')}
           </div>
         </div>
 
@@ -890,45 +895,91 @@
   // ─────────────── router ───────────────
   // ─────────────── DONATIONS ───────────────
   // Approved (slip-checked) donations only, names partly hidden, no phone numbers or slips.
-  // Drawn at once from data/donations.json (baked into the site by the deploy workflow), then replaced by
-  // the live list from Apps Script (≤ 1 min behind the sheet) and refreshed every minute while open.
+  // Shown at once from the newest copy this browser has (last live answer, else data/donations.json baked by
+  // the deploy workflow), then replaced by the live list from Apps Script (≤ 30 s behind the sheet).
+  // While the page is open it refreshes every 30 s, and again whenever the tab comes back into view.
+  const DON_KEY = 'rh_don_v1';
+  const donStore = {
+    get: () => { try { const c = JSON.parse(localStorage.getItem(DON_KEY) || 'null'); return c && Date.now() - c.t < 86400_000 ? c : null; } catch { return null; } },
+    set: d => { try { localStorage.setItem(DON_KEY, JSON.stringify({ t: Date.now(), d })); } catch { /* storage blocked */ } },
+  };
+  const donKey = x => { if (!x) return ''; const { updated_at, ...rest } = x; return JSON.stringify(rest); };
+  const hhmm = ts => { const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}.${String(d.getMinutes()).padStart(2, '0')}`; };
+
   async function pageDonate(id) {
-    const live = () => (window.RH.backend === 'apps-script' ? api('/api/donations').catch(() => null) : Promise.resolve(null));
+    const liveOn = window.RH.backend === 'apps-script';
+    const live = () => (liveOn ? api('/api/donations').catch(() => null) : Promise.resolve(null));
     const liveNow = live();
-    let d = null;
-    try { d = await fetch('data/donations.json', { cache: 'no-cache' }).then(r => (r.ok ? r.json() : null)); } catch { /* not built yet */ }
-    if (!d) d = await liveNow;
+    let d = null, at = 0;
+    const cached = donStore.get();
+    if (cached) { d = cached.d; at = cached.t; }
+    else {
+      try { d = await fetch('data/donations.json', { cache: 'no-cache' }).then(r => (r.ok ? r.json() : null)); } catch { /* not built yet */ }
+      if (!d) { d = await liveNow; if (d) { at = Date.now(); donStore.set(d); } }
+    }
     if (id !== renderId) return;
     document.title = 'ผู้ร่วมบริจาค · RATTANA HELP';
-    let shown = '';
+    let shown = donKey(d), liveAt = at;
+    const note = msg => { const el = view.querySelector('.don-note'); if (el) el.textContent = msg; };
+    const stamp = () => note(liveAt ? `อัปเดตล่าสุด ${hhmm(liveAt)} น. · รายการที่ทีมงานอนุมัติแล้วจะขึ้นภายในประมาณ 1 นาที` : 'กำลังโหลดข้อมูลล่าสุด…');
     const update = x => {
-      if (!x || id !== renderId) return;
-      const { updated_at, ...rest } = x;
-      const key = JSON.stringify(rest);
-      if (key === shown) return;
-      shown = key; drawDonations(x); enhance(view);
+      if (id !== renderId) return;
+      if (!x) { if (!liveAt) note('ยังเชื่อมต่อข้อมูลล่าสุดไม่ได้ — จะลองใหม่อัตโนมัติ'); return; }
+      liveAt = Date.now(); donStore.set(x);
+      const key = donKey(x);
+      if (key !== shown) { shown = key; drawDonations(x); enhance(view); }
+      stamp();
     };
-    const timer = setInterval(() => live().then(update), 60_000);
-    onCleanup(() => clearInterval(timer));
-    drawDonations(d); shown = d ? JSON.stringify((({ updated_at, ...r }) => r)(d)) : '';
+    drawDonations(d);
+    if (!liveOn) { note('อัปเดตอัตโนมัติ'); return; } // Node server: the list above is already live
+    stamp();
     liveNow.then(update);
+    {
+      const refresh = () => { if (!document.hidden) live().then(update); };
+      const timer = setInterval(refresh, 30_000);
+      document.addEventListener('visibilitychange', refresh);
+      window.addEventListener('focus', refresh);
+      onCleanup(() => { clearInterval(timer); document.removeEventListener('visibilitychange', refresh); window.removeEventListener('focus', refresh); });
+    }
   }
+
+  // Messages of support ("กำลังใจ") float as liquid-glass bubbles over the page header. The layer ignores the
+  // pointer and sits only on the header (which has no buttons), so it never covers anything people tap.
+  function bubbles(msgs) {
+    if (!msgs.length) return '';
+    const slots = Math.min(msgs.length, 4);
+    return `<div class="don-bubbles" aria-hidden="true">${Array.from({ length: slots }, (_, i) => `
+      <div class="don-bubble b${i}" data-i="${i}"><span class="q">“</span><span class="t">${esc(msgs[i].msg)}</span><span class="by">${icon('heart')}${esc(msgs[i].name)}</span></div>`).join('')}</div>`;
+  }
+  function startBubbles(msgs) {
+    const els = view.querySelectorAll('.don-bubble');
+    if (!els.length || msgs.length <= els.length) return;
+    let next = els.length;
+    els.forEach(el => el.addEventListener('animationiteration', () => {
+      const m = msgs[next++ % msgs.length];
+      el.querySelector('.t').textContent = m.msg;
+      el.querySelector('.by').lastChild.textContent = m.name;
+    }));
+  }
+
   function drawDonations(d) {
     const list = (d && d.donations) || [], pending = (d && d.pending) || { count: 0 };
-    const itemText = items => items.map(i => `${esc(i.name)} ${fmtNum(i.qty)} ${esc(String(i.unit || '').replace(/\s*(x\d.*|\(.*\))$/i, ''))}`).join(' · ');
+    const msgs = list.filter(x => x.msg).map(x => ({ msg: x.msg, name: x.name }));
+    const itemText = items => items.map(i => `${esc(i.name)} ${fmtNum(i.qty)} ${esc(unitName(i.unit))}`).join(' · ');
+    const totalPieces = d ? d.items.reduce((s, i) => s + pieces(i.qty, i.unit, i.name), 0) : 0;
     const stat = (ic, v, unit, label) => `<div class="stat"><div class="stat-ic">${icon(ic)}</div><div class="stat-v"><span data-count="${Number(v) || 0}">0</span><small>${unit}</small></div><div class="stat-l">${label}</div></div>`;
     view.innerHTML = `
-      <section class="page-head"><div class="container">
+      <section class="page-head${msgs.length ? ' has-bubbles' : ''}"><div class="container">
         <span class="eyebrow">Donations</span>
         <h1>ผู้ร่วมบริจาค</h1>
         <p>ขอบคุณทุกน้ำใจที่ร่วมส่งต่อความช่วยเหลือ — แสดงเฉพาะรายการที่ตรวจสอบสลิปแล้ว และแสดงชื่อเพียงบางส่วนเพื่อความเป็นส่วนตัว</p>
-      </div></section>
+      </div>${bubbles(msgs)}</section>
       <div class="container" style="padding:20px 16px 48px">
         <div class="stat-grid">
           ${stat('heart', d ? d.total_amount : 0, 'บาท', 'ยอดบริจาครวม')}
           ${stat('users', d ? d.donor_count : 0, 'ราย', 'ผู้ร่วมบริจาค')}
           ${stat('gift', d ? d.order_count : 0, 'ครั้ง', 'รายการบริจาค')}
-          ${stat('box', d ? d.items.reduce((s, i) => s + (i.qty || 0), 0) : 0, 'หน่วย', 'สิ่งของที่ร่วมบริจาค')}
+          ${stat('box', totalPieces, 'ชิ้น', 'สิ่งของที่ร่วมบริจาค')}
         </div>
         ${pending.count ? `<p class="don-pending">${icon('calendar')}<span>รอตรวจสอบสลิปอีก <b>${fmtNum(pending.count)}</b> รายการ — จะแสดงในรายชื่อเมื่อทีมงานตรวจสอบแล้ว</span></p>` : ''}
         <div class="don-grid">
@@ -937,20 +988,21 @@
             ${list.length ? `<ul class="don-list">${list.map(x => `
               <li>
                 <span class="don-av">${esc(Array.from(x.name)[0] || '♥')}</span>
-                <div class="don-tx"><b>${esc(x.name)}</b><small>${itemText(x.items)}</small><small class="don-date">${fmtDate(x.date)}${x.time ? ` · ${esc(x.time)} น.` : ''}</small></div>
+                <div class="don-tx"><b>${esc(x.name)}</b><small>${itemText(x.items)}</small>${x.msg ? `<span class="don-msg">“${esc(x.msg)}”</span>` : ''}<small class="don-date">${fmtDate(x.date)}${x.time ? ` · ${esc(x.time)} น.` : ''}</small></div>
                 <span class="don-amt">${fmtNum(x.amount)}<small>บาท</small></span>
               </li>`).join('')}</ul>`
               : emptyState('ยังไม่มีรายการที่ตรวจสอบแล้ว', pending.count ? 'รายการบริจาคจะแสดงที่นี่เมื่อทีมงานตรวจสอบสลิปเรียบร้อย' : 'ร่วมเป็นคนแรกที่ส่งต่อความช่วยเหลือ', 'heart')}
           </section>
           <aside style="display:flex;flex-direction:column;gap:16px">
             ${d && d.items.length ? `<section class="card card-pad"><h3 class="card-title">${icon('box')} สิ่งของที่ร่วมบริจาค</h3>
-              <table class="items-table"><tbody>${d.items.map(i => `<tr><td><span class="dot"></span>${esc(i.name)}</td><td class="q">${fmtNum(i.qty)}<small>${esc(String(i.unit || '').replace(/\s*(x\d.*|\(.*\))$/i, ''))}</small></td></tr>`).join('')}</tbody></table></section>` : ''}
+              <table class="items-table"><tbody>${d.items.map(i => `<tr><td><span class="dot"></span>${esc(i.name)}</td><td class="q">${qtyText(i.qty, i.unit, i.name)}</td></tr>`).join('')}</tbody></table></section>` : ''}
             ${supportCard('ร่วมบริจาคสิ่งของ')}
           </aside>
         </div>
-        <p class="don-note">อัปเดตอัตโนมัติ · รายการที่ทีมงานอนุมัติแล้วจะขึ้นภายในประมาณ 1 นาที</p>
+        <p class="don-note"></p>
       </div>`;
     countUp(view);
+    startBubbles(msgs);
   }
 
   const ROUTES = [

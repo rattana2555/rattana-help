@@ -79,6 +79,14 @@ function isoDate(v) {
 const APPROVED = /อนุมัติ|ยืนยัน|ตรวจแล้ว|ตรวจสอบแล้ว|สำเร็จ|ผ่าน|ได้รับ|approved/i;
 const NOT_YET = /ไม่|รอ|ปฏิเสธ|ยกเลิก|reject|pending/i;
 const approved = s => APPROVED.test(s || '') && !NOT_YET.test(s || '');
+// Message of support shown on the page: plain text only — no links, no phone numbers, max 120 characters
+function cleanMsg(v) {
+  let s = String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+  s = s.replace(/(https?:\/\/|www\.)\S+/gi, '').replace(/\b(?:line\.me|lin\.ee)\S*/gi, '').replace(/\+?\d[\d\s-]{7,}\d/g, '').trim();
+  if (!/\p{L}/u.test(s)) return '';            // "-", ".", "…" only
+  const g = graphemes(s);
+  return g.length > 120 ? g.slice(0, 119).join('') + '…' : s;
+}
 
 // ── build ──
 const rows = parseCsv(await fetchCsv());
@@ -87,6 +95,7 @@ const col = name => head.findIndex(h => h === name);
 const C = {
   date: col('วัน'), time: col('เวลา'), order: col('orderId'), name: col('ชื่อร้าน'), kind: col('รูปแบบ'),
   item: col('ชื่อสินค้า'), qty: col('จำนวน'), unit: col('หน่วย'), amount: col('ยอดเงินรวม'), dest: col('ปลายทาง'), status: col('สถานะอนุมัติ'),
+  msg: head.findIndex(h => h.includes('กำลังใจ')),
 };
 for (const k of ['date', 'order', 'name', 'item', 'qty', 'amount', 'status']) {
   if (C[k] < 0) throw new Error(`column missing: ${k}`);
@@ -101,10 +110,11 @@ for (const r of rows) {
   if (test || /ยกเลิก/.test(get(r, 'kind'))) continue;
   let o = orders.get(id);
   if (!o) {
-    o = { date: isoDate(get(r, 'date')), time: get(r, 'time').replace(':', '.'), donor: get(r, 'name'), status: get(r, 'status'), items: [], amount: 0 };
+    o = { date: isoDate(get(r, 'date')), time: get(r, 'time').replace(':', '.'), donor: get(r, 'name'), status: get(r, 'status'), items: [], amount: 0, msg: '' };
     orders.set(id, o);
   }
   if (!o.status) o.status = get(r, 'status');
+  if (!o.msg) o.msg = cleanMsg(get(r, 'msg'));
   o.items.push({ name: get(r, 'item'), qty: num(get(r, 'qty')), unit: get(r, 'unit') });
   o.amount += num(get(r, 'amount'));
 }
@@ -125,7 +135,7 @@ const data = {
   items: [...itemTotals.values()].sort((a, b) => b.qty - a.qty),
   donations: ok
     .sort((a, b) => `${b.date || ''} ${b.time}`.localeCompare(`${a.date || ''} ${a.time}`))
-    .map(o => ({ date: o.date, time: o.time, name: mask(o.donor), items: o.items, amount: round2(o.amount) })),
+    .map(o => ({ date: o.date, time: o.time, name: mask(o.donor), items: o.items, amount: round2(o.amount), ...(o.msg ? { msg: o.msg } : {}) })),
   pending: { count: pend.length, amount: round2(pend.reduce((s, o) => s + o.amount, 0)) },
 };
 writeFileSync(OUT, JSON.stringify(data));

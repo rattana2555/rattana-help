@@ -33,6 +33,8 @@ jobs:
           LIVE: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/snapshot.json
           LIVE_DON: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/donations.json
           DONATIONS_SHEET_ID: ${{ secrets.DONATIONS_SHEET_ID }}
+          LIVE_PROD: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/products.json
+          PRODUCTS_SHEET_ID: ${{ secrets.PRODUCTS_SHEET_ID }}
         run: |
           mkdir -p docs/data
           API=$(grep -oE "https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec" docs/assets/js/config.js | head -1 || true)
@@ -61,6 +63,13 @@ jobs:
           else
             echo "::warning::Donation sheet not read — keeping the donations list that is live now"
             curl -sfL "$LIVE_DON" -o docs/data/donations.json || rm -f docs/data/donations.json
+          fi
+          # Admin item editor: product names + units only (pieces per pack/case) — scripts/products.mjs
+          if node scripts/products.mjs docs/data/products.json && [ -f docs/data/products.json ]; then
+            if ! (curl -sfL "$LIVE_PROD" -o live_prod.json && cmp -s live_prod.json docs/data/products.json); then changed=true; fi
+          else
+            echo "::warning::Product sheet not read — keeping the product list that is live now"
+            curl -sfL "$LIVE_PROD" -o docs/data/products.json || rm -f docs/data/products.json
           fi
           if [ "${{ github.event_name }}" != "schedule" ]; then changed=true; fi
           echo "changed=$changed" >> "$GITHUB_OUTPUT"

@@ -24,9 +24,10 @@
     return j.data;
   }
   // Reads retry: Apps Script now and then answers with a temporary HTML error page instead of JSON
-  async function gasGet(action, tries = 3) {
+  async function gasGet(action, tries = 3, fresh = false) {
     for (let i = 1; ; i++) {
-      try { return await fetch(`${CFG.apiUrl}?action=${encodeURIComponent(action)}`).then(unwrap); }
+      // fresh: a unique query so no browser or proxy cache can hand back an older answer
+      try { return await fetch(`${CFG.apiUrl}?action=${encodeURIComponent(action)}${fresh ? `&_=${Date.now()}` : ''}`, fresh ? { cache: 'no-store' } : undefined).then(unwrap); }
       catch (e) { if (i >= tries || (e.status && e.status < 500)) throw e; await new Promise(r => setTimeout(r, 700 * i)); }
     }
   }
@@ -133,6 +134,8 @@
   }
 
   // ── joins (mirror of the SQL in server.js) ──
+  // Items count in pieces ("1 แพ็คx12" = 12) — see RH.pieces in common.js
+  const pcs = i => RH.pieces(i.quantity, i.unit, i.name);
   const photoUrl = (p, w) => p.file_id ? `https://lh3.googleusercontent.com/d/${encodeURIComponent(p.file_id)}=w${w}` : null;
   const byKey = (list, k = 'id') => new Map(list.map(x => [x[k], x]));
   const desc = (a, b) => (a == null ? '' : String(a)) < (b == null ? '' : String(b)) ? 1 : (a == null ? '' : String(a)) > (b == null ? '' : String(b)) ? -1 : 0;
@@ -172,7 +175,7 @@
         round_no: pr.round_no, project_name: pr.name, project_status: pr.status, project_category: pr.category || 'flood',
         province: PV.get(l.province_id)?.name_th || null, district: D.get(l.district_id)?.name_th || null, subdistrict: S.get(l.subdistrict_id)?.name_th || null,
         cover_thumb: cover ? cover.thumb_path : null, cover_url: cover ? cover.file_path : null,
-        photo_count: ph.length, items_total: (itemsBy.get(l.id) || []).reduce((s, i) => s + (i.quantity || 0), 0),
+        photo_count: ph.length, items_total: (itemsBy.get(l.id) || []).reduce((s, i) => s + pcs(i), 0),
       });
     });
     db.P = P; db.L = L; db.photosBy = photosBy; db.itemsBy = itemsBy;
@@ -191,7 +194,7 @@
       rounds_delivered: new Set(del.map(l => l.project_id)).size,
       beneficiaries: del.reduce((s, l) => s + (l.beneficiaries || 0), 0),
       households: del.reduce((s, l) => s + (l.households || 0), 0),
-      items_delivered: db.items.filter(i => delIds.has(i.location_id)).reduce((s, i) => s + (i.quantity || 0), 0),
+      items_delivered: db.items.filter(i => delIds.has(i.location_id)).reduce((s, i) => s + pcs(i), 0),
       rounds_total: db.projects.length, photos: db.photos.length,
       updated_at: db.locations.reduce((m, l) => (l.updated_at && l.updated_at > m ? l.updated_at : m), '') || null,
       status: {
@@ -215,7 +218,7 @@
         location_count: locs.length, delivered_count: del.length,
         beneficiaries: del.reduce((s, l) => s + (l.beneficiaries || 0), 0),
         beneficiaries_planned: locs.reduce((s, l) => s + (l.beneficiaries || 0), 0),
-        items_total: db.items.filter(i => ids.has(i.location_id)).reduce((s, i) => s + (i.quantity || 0), 0),
+        items_total: db.items.filter(i => ids.has(i.location_id)).reduce((s, i) => s + pcs(i), 0),
         photo_count: ph.length,
         provinces: [...new Set(locs.map(l => l.province).filter(Boolean))].join(', ') || null,
         first_date: dates[0] || null, last_date: dates.at(-1) || null,
@@ -262,8 +265,8 @@
     const delIds = new Set(del.map(l => l.id)), byItem = new Map();
     db.items.filter(i => delIds.has(i.location_id)).forEach(i => {
       const k = `${i.name}\u0000${i.unit || ''}`;
-      const r = byItem.get(k) || { name: i.name, unit: i.unit, quantity: 0, _locs: new Set() };
-      r.quantity += i.quantity || 0; r._locs.add(i.location_id); byItem.set(k, r);
+      const r = byItem.get(k) || { name: i.name, unit: i.unit, quantity: 0, pieces: 0, _locs: new Set() };
+      r.quantity += i.quantity || 0; r.pieces += pcs(i); r._locs.add(i.location_id); byItem.set(k, r);
     });
     const byCat = new Map();
     db.projects.forEach(p => {
@@ -276,7 +279,7 @@
       stats: stats(db),
       byCategory: [...byCat.values()].sort((a, b) => b.beneficiaries - a.beneficiaries || b.projects - a.projects),
       byProvince: [...byProv.values()].sort((a, b) => b.beneficiaries - a.beneficiaries),
-      byItem: [...byItem.values()].map(r => ({ name: r.name, unit: r.unit, quantity: r.quantity, locations: r._locs.size })).sort((a, b) => b.quantity - a.quantity).slice(0, 12),
+      byItem: [...byItem.values()].map(r => ({ name: r.name, unit: r.unit, quantity: r.quantity, pieces: r.pieces, locations: r._locs.size })).sort((a, b) => b.pieces - a.pieces).slice(0, 12),
       projects: projectAggregates(db),
       recent: clone(sortLocs(db.locations).slice(0, 6)),
     };
@@ -378,7 +381,7 @@
   on('DELETE', '/api/admin/admins/(\\d+)', async ([id]) => write('adminDelete', { id: +id }));
   on('PUT', '/api/admin/me/password', async (_, __, b) => gasPost('changePassword', b));
   // Donations page: live list from the donation sheet (Apps Script caches it for 60 s)
-  on('GET', '/api/donations', async () => gasGet('donations'));
+  on('GET', '/api/donations', async () => gasGet('donations', 2, true));
   on('GET', '/api/admin/donation-sheet', async () => gasPost('donationSheet'));
   on('PUT', '/api/admin/donation-sheet', async (_, __, b) => gasPost('donationSheet', { url: b.url || '' }));
 

@@ -684,7 +684,7 @@ function donationsData_() {
   if (!id) return null;
   var data = buildDonations_(readDonationRows_(id));
   data.updated_at = now_();
-  try { cache.put('DON', JSON.stringify(data), 60); } catch (x) { /* too big to cache: fine */ }
+  try { cache.put('DON', JSON.stringify(data), 30); } catch (x) { /* too big to cache: fine */ }
   return data;
 }
 function readDonationRows_(id) {
@@ -712,13 +712,21 @@ function donDate_(v) {
   if (m) { var y = +m[3]; if (y > 2400) y -= 543; return y + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2); }
   return null;
 }
+// Message of support ("กำลังใจ") shown on the page: plain text only — no links, no phone numbers, max 120 characters
+function donMsg_(v) {
+  var s = String(v || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+  s = s.replace(/(https?:\/\/|www\.)\S+/gi, '').replace(/\b(?:line\.me|lin\.ee)\S*/gi, '').replace(/\+?\d[\d\s-]{7,}\d/g, '').trim();
+  if (!/[A-Za-zก-ฮเ-ไ]/.test(s)) return ''; // "-", ".", "…" only
+  var g = graphemesTh_(s);
+  return g.length > 120 ? g.slice(0, 119).join('') + '…' : s;
+}
 function donNum_(v) { var n = Number(String(v == null ? '' : v).replace(/[,\s฿]/g, '')); return isFinite(n) ? n : 0; }
 function donApproved_(s) { return /อนุมัติ|ยืนยัน|ตรวจแล้ว|ตรวจสอบแล้ว|สำเร็จ|ผ่าน|ได้รับ|approved/i.test(s || '') && !/ไม่|รอ|ปฏิเสธ|ยกเลิก|reject|pending/i.test(s || ''); }
 function buildDonations_(rows) {
   rows = (rows || []).filter(function (r) { return r.some(function (v) { return String(v).trim(); }); });
   var head = (rows.shift() || []).map(function (h) { return String(h).trim(); });
   var c = function (n) { return head.indexOf(n); };
-  var C = { date: c('วัน'), time: c('เวลา'), order: c('orderId'), name: c('ชื่อร้าน'), kind: c('รูปแบบ'), item: c('ชื่อสินค้า'), qty: c('จำนวน'), unit: c('หน่วย'), amount: c('ยอดเงินรวม'), dest: c('ปลายทาง'), status: c('สถานะอนุมัติ') };
+  var C = { date: c('วัน'), time: c('เวลา'), order: c('orderId'), name: c('ชื่อร้าน'), kind: c('รูปแบบ'), item: c('ชื่อสินค้า'), qty: c('จำนวน'), unit: c('หน่วย'), amount: c('ยอดเงินรวม'), dest: c('ปลายทาง'), status: c('สถานะอนุมัติ'), msg: head.findIndex(function (h) { return h.indexOf('กำลังใจ') >= 0; }) };
   ['date', 'order', 'name', 'item', 'qty', 'amount', 'status'].forEach(function (k) { if (C[k] < 0) throw err_(400, 'ชีตบริจาคไม่มีคอลัมน์ที่ต้องใช้ (' + k + ')'); });
   var get = function (r, k) { return C[k] >= 0 ? String(r[C[k]] == null ? '' : r[C[k]]).trim() : ''; };
   var orders = {}, order = [];
@@ -727,8 +735,9 @@ function buildDonations_(rows) {
     if (!id) return;
     if (/test/i.test(id) || /ทดสอบ/.test(get(r, 'name')) || /ทดสอบ/.test(get(r, 'dest')) || /ยกเลิก/.test(get(r, 'kind'))) return;
     var o = orders[id];
-    if (!o) { o = orders[id] = { date: donDate_(get(r, 'date')), time: get(r, 'time').replace(':', '.'), donor: get(r, 'name'), status: get(r, 'status'), items: [], amount: 0 }; order.push(o); }
+    if (!o) { o = orders[id] = { date: donDate_(get(r, 'date')), time: get(r, 'time').replace(':', '.'), donor: get(r, 'name'), status: get(r, 'status'), items: [], amount: 0, msg: '' }; order.push(o); }
     if (!o.status) o.status = get(r, 'status');
+    if (!o.msg) o.msg = donMsg_(get(r, 'msg'));
     o.items.push({ name: get(r, 'item'), qty: donNum_(get(r, 'qty')), unit: get(r, 'unit') });
     o.amount += donNum_(get(r, 'amount'));
   });
@@ -745,7 +754,7 @@ function buildDonations_(rows) {
     total_amount: sum(ok), order_count: ok.length, donor_count: Object.keys(donors).length,
     items: Object.keys(totals).map(function (k) { return totals[k]; }).sort(function (a, b) { return b.qty - a.qty; }),
     donations: ok.sort(function (a, b) { var x = (b.date || '') + ' ' + b.time, y = (a.date || '') + ' ' + a.time; return x < y ? -1 : x > y ? 1 : 0; })
-      .map(function (o) { return { date: o.date, time: o.time, name: maskName_(o.donor), items: o.items, amount: r2(o.amount) }; }),
+      .map(function (o) { var d = { date: o.date, time: o.time, name: maskName_(o.donor), items: o.items, amount: r2(o.amount) }; if (o.msg) d.msg = o.msg; return d; }),
     pending: { count: pend.length, amount: sum(pend) }
   };
 }
