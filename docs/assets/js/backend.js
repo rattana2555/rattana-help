@@ -30,10 +30,44 @@
       catch (e) { if (i >= tries || (e.status && e.status < 500)) throw e; await new Promise(r => setTimeout(r, 700 * i)); }
     }
   }
-  const gasPost = (action, payload = {}) => fetch(CFG.apiUrl, {
-    method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify({ ...payload, action, token: token() }),
-  }).then(unwrap);
+  // Apps Script now and then answers a POST with a Google error page, hangs, or even serves the public dataset
+  // (doGet) instead of running doPost. Check every answer's shape and retry when it is safe:
+  //  · the answer shows doPost never ran (public dataset) → always safe
+  //  · unknown outcome (error page / timeout / network) → safe for reads, and for writes once the backend
+  //    remembers each write's opId (Code.gs API v3) so a repeated write is answered without running twice
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const SHAPE = {
+    write: d => d && d.data && Array.isArray(d.data.projects), // (a write that returns nothing has no 'result' key)
+    adminData: d => d && Array.isArray(d.projects) && 'me' in d,
+    login: d => d && d.token && d.data && Array.isArray(d.data.projects),
+  };
+  const newOpId = () => (window.crypto && crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`);
+  let apiVer = 0; // last backend version seen (kept when the cached dataset is dropped)
+  const idempotent = () => apiVer >= 3;
+  async function gasPost(action, payload = {}, { write = false } = {}) {
+    const opId = write ? newOpId() : undefined;
+    const body = JSON.stringify({ ...payload, action, token: token(), opId });
+    const ok = SHAPE[write ? 'write' : action] || (() => true);
+    const tries = write ? 4 : 3;
+    let maybeRan = false;
+    for (let i = 1; ; i++) {
+      let j = null;
+      const ctl = window.AbortController ? new AbortController() : null;
+      const timer = ctl && setTimeout(() => ctl.abort(), write ? 90_000 : 45_000);
+      try {
+        const res = await fetch(CFG.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body, signal: ctl && ctl.signal });
+        try { j = await res.json(); } catch { /* error page */ }
+      } catch { /* network error / timeout */ } finally { clearTimeout(timer); }
+      if (j && j.ok === false) { if (j.status === 401) store.set(TOKEN_KEY, null); throw new HttpErr(j.status || 500, j.error || 'เกิดข้อผิดพลาด'); }
+      if (j && j.ok && ok(j.data)) return j.data;
+      const notRun = !!(j && j.ok && j.data && Array.isArray(j.data.projects) && !('me' in j.data) && !('result' in j.data));
+      if (!notRun) maybeRan = true;
+      const safe = notRun || !write || idempotent();
+      if (i < tries && safe) { await sleep(900 * i); continue; }
+      if (write && maybeRan) { adm = null; throw new HttpErr(503, 'ระบบ Google ตอบช้าหรือขัดข้องชั่วคราว ไม่แน่ใจว่าบันทึกสำเร็จหรือไม่ — กดรีเฟรชแล้วตรวจสอบอีกครั้ง'); }
+      throw new HttpErr(503, 'ระบบ Google ตอบช้าหรือขัดข้องชั่วคราว กรุณาลองอีกครั้ง');
+    }
+  }
 
   // ── public dataset: never make a visitor wait for Apps Script (1–10 s) ──
   // 1. returning visitor → last data from localStorage, instantly
@@ -69,15 +103,19 @@
     return Promise.any([snap, live]).catch(() => live); // whichever arrives first; live error surfaces if both fail
   }
 
+  let admLoading = null;
   async function adminData() {
     if (adm) return adm;
     if (!token()) throw new HttpErr(401, 'กรุณาเข้าสู่ระบบ');
-    adm = build(await gasPost('adminData'), true);
-    return adm;
+    // several admin views ask at once on first load: share one request
+    if (!admLoading) admLoading = gasPost('adminData').then(d => { adm = build(d, true); return adm; }).finally(() => { admLoading = null; });
+    return admLoading;
   }
   async function write(action, payload) {
-    const r = await gasPost(action, payload);
-    adm = build(r.data, true);
+    const r = await gasPost(action, payload, { write: true });
+    // parallel writes (photo uploads) can answer out of order: keep the newest snapshot (rev = when it was read)
+    const next = build(r.data, true);
+    if (!adm || !(adm.rev > next.rev)) adm = next;
     pub = null; pubKey = ''; store.set(PUB_KEY, null);
     return r.result;
   }
@@ -89,8 +127,9 @@
   const STAGE_ORDER = { collect: 1, prepare: 2, transit: 3, deliver: 4, after: 5 };
 
   function build(d, isAdmin) {
+    if (isAdmin && d.api_version) apiVer = d.api_version;
     const db = {
-      isAdmin, me: d.me || null, api_version: d.api_version || 1,
+      isAdmin, me: d.me || null, api_version: d.api_version || 1, rev: d.rev || 0,
       projects: d.projects || [], locations: d.locations || [], items: d.items || [], photos: d.photos || [], updates: d.updates || [],
       provinces: d.provinces || [], districts: d.districts || [], subdistricts: d.subdistricts || [], admins: d.admins || [],
     };

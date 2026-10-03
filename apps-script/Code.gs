@@ -22,7 +22,7 @@ var STEPS = ['support', 'collect', 'prepare', 'transit', 'deliver'];
 var ROLES = ['super', 'field'];
 // Project types (keep in sync with CATEGORIES in docs/assets/js/common.js)
 var CATEGORY_KEYS = ['flood', 'drought', 'fire', 'storm', 'cold', 'community', 'education', 'health', 'other'];
-var API_VERSION = 2;
+var API_VERSION = 3;
 
 var TABLES = {
   // New columns are only ever appended at the end (ensureSchema_ adds them to existing sheets)
@@ -132,9 +132,19 @@ function doPost(e) {
     }
     var result;
     if (def.write) {
+      // opId: the site may resend a write when Google's answer got lost; run each write only once
+      var cache = CacheService.getScriptCache(), opKey = body.opId ? 'OP_' + sha_(String(body.opId)) : null;
       var lock = LockService.getScriptLock();
       lock.waitLock(30000);
-      try { result = def.fn(body, me); clearPublicCache_(); } finally { lock.releaseLock(); }
+      try {
+        var done = opKey ? cache.get(opKey) : null;
+        if (done !== null && done !== undefined) result = JSON.parse(done);
+        else {
+          result = def.fn(body, me);
+          clearPublicCache_();
+          if (opKey) cache.put(opKey, JSON.stringify(result === undefined ? null : result), 21600);
+        }
+      } finally { lock.releaseLock(); }
       return out_({ ok: true, data: { result: result, data: adminData_(me) } });
     }
     return out_({ ok: true, data: def.fn(body, me) });
@@ -355,6 +365,7 @@ function adminData_(me) {
     subdistricts: strip_(rows_('subdistricts'), []),
     people: people,
     api_version: API_VERSION,
+    rev: Date.now(),
     admins: me && me.role === 'super' ? strip_(rows_('admins'), ['password_hash', 'salt']) : []
   };
 }

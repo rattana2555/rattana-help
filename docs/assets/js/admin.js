@@ -190,11 +190,11 @@
 
   // ─────────────── OVERVIEW ───────────────
   async function pageOverview(id) {
-    const d = await call('/api/admin/dashboard');
+    const [d, notice] = await Promise.all([call('/api/admin/dashboard'), isSuper() ? backendNotice() : '']);
     if (id !== renderId) return;
     const s = d.stats;
     const demo = d.recent.some(l => (l.description || '').includes('ข้อมูลตัวอย่าง'));
-    main.innerHTML = `
+    main.innerHTML = `${notice}
       <div class="page-title"><div><h1>ภาพรวมโครงการ</h1><p>สวัสดี ${esc(me.display_name || me.username)} · ข้อมูลทั้งหมดรวมรายการที่ยังไม่เผยแพร่</p></div>
         ${isSuper() ? `<div class="inline-actions"><a class="btn btn-gold" href="#locations/new">${icon('plus')} เพิ่มจุดช่วยเหลือ</a><button class="btn btn-outline" id="qNewProj">${icon('folder')} เพิ่มโครงการ</button></div>` : `<a class="btn btn-gold" href="#locations">${icon('image')} อัปเดตหน้างาน</a>`}</div>
       ${!isSuper() ? `<div class="acard"><div class="acard-body" style="display:flex;gap:12px;align-items:flex-start">
@@ -234,8 +234,8 @@
   async function backendNotice() {
     try {
       const m = await api('/api/admin/meta');
-      if (m && m.backend === 'apps-script' && (m.api_version || 1) < 2) return `<div class="acard" style="border-top-color:#D93B30"><div class="acard-body" style="display:flex;gap:12px;align-items:flex-start">
-        <span style="font-size:22px">⚠️</span><div><b>โค้ด Apps Script ยังเป็นเวอร์ชันเก่า</b><p style="color:var(--muted);font-size:13.5px">ประเภทโครงการจะยังไม่ถูกบันทึก — วางโค้ด <code>apps-script/Code.gs</code> ล่าสุด แล้ว Deploy → Manage deployments → แก้ไข → เวอร์ชันใหม่ (ดู SETUP.md)</p></div></div></div>`;
+      if (m && m.backend === 'apps-script' && (m.api_version || 1) < 3) return `<div class="acard" style="border-top-color:#D93B30"><div class="acard-body" style="display:flex;gap:12px;align-items:flex-start">
+        <span style="font-size:22px">⚠️</span><div><b>โค้ด Apps Script ยังเป็นเวอร์ชันเก่า</b><p style="color:var(--muted);font-size:13.5px">ประเภทโครงการยังไม่ถูกบันทึก และระบบยังลองบันทึกซ้ำให้อัตโนมัติไม่ได้เมื่อ Google ขัดข้อง — วางโค้ด <code>apps-script/Code.gs</code> ล่าสุด แล้ว Deploy → Manage deployments → แก้ไข → เวอร์ชันใหม่ (ดู SETUP.md)</p></div></div></div>`;
     } catch { /* Node server: nothing to update */ }
     return '';
   }
@@ -1005,16 +1005,26 @@ ${field ? `
       if (!files.length) return;
       const prog = $('#upProg', el);
       const meta = { stage: $('#upStage', el).value, taken_date: $('#upDate', el).value, caption: $('#upCap', el).value };
-      let ok = 0;
-      for (const [i, file] of files.entries()) {
-        prog.innerHTML = `<div class="row"><span>กำลังอัปโหลด ${i + 1}/${files.length}: ${esc(file.name)}</span><span>${Math.round(i / files.length * 100)}%</span></div><div class="progress"><i class="go" style="--w:${i / files.length * 100}%"></i></div>`;
-        try {
-          const full = await resizeImage(file, 1920, 0.85);
-          const th = await resizeImage(file, 640, 0.8);
-          await call('/api/admin/photos', { method: 'POST', body: { location_id: lid, ...meta, image: full.dataUrl, thumb: th.dataUrl, width: full.width, height: full.height } });
-          ok++;
-        } catch (e) { toast(`${file.name}: ${e.message}`, 'error'); }
-      }
+      // Up to 3 uploads at a time: most of the wait is Google's per-request overhead, not the file itself
+      const gas = window.RH.backend === 'apps-script';
+      // older Apps Script code can't order parallel answers: upload one at a time there
+      const lanes = gas ? (((await call('/api/admin/meta').catch(() => ({}))).api_version || 1) >= 3 ? 3 : 1) : 3;
+      let ok = 0, done = 0, next = 0;
+      const show = () => { prog.innerHTML = `<div class="row"><span>กำลังอัปโหลด ${Math.min(done + 1, files.length)}/${files.length} ภาพ…</span><span>${Math.round(done / files.length * 100)}%</span></div><div class="progress"><i class="go" style="--w:${Math.max(4, done / files.length * 100)}%"></i></div>`; };
+      show();
+      const worker = async () => {
+        while (next < files.length) {
+          const file = files[next++];
+          try {
+            const full = await resizeImage(file, gas ? 1600 : 1920, 0.82);
+            const th = gas ? null : await resizeImage(file, 640, 0.8);
+            await call('/api/admin/photos', { method: 'POST', body: { location_id: lid, ...meta, image: full.dataUrl, ...(th ? { thumb: th.dataUrl } : {}), width: full.width, height: full.height } });
+            ok++;
+          } catch (e) { toast(`${file.name}: ${e.message}`, 'error'); }
+          done++; show();
+        }
+      };
+      await Promise.all(Array.from({ length: Math.min(lanes, files.length) }, worker));
       prog.innerHTML = '';
       if (ok) toast(`อัปโหลดสำเร็จ ${ok} ภาพ`, 'success');
       onDone && onDone();
