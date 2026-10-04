@@ -456,21 +456,27 @@
     if (id !== renderId) return;
     const photos = d.photos;
     const upd = Object.fromEntries(d.updates.map(u => [u.step, u]));
-    const firstPending = STEPS.findIndex(([k]) => !upd[k]);
+    // Steps already passed follow from the status, so a point marked "ส่งมอบแล้ว" shows all 5 steps done even when
+    // the team didn't fill each step in: กำลังเตรียม = 1–2 · กำลังนำส่ง = 1–4 · ส่งมอบแล้ว = 1–5.
+    // Dates / notes entered in the admin are still shown on their step.
+    const byStatus = { preparing: 2, in_transit: 4, delivered: STEPS.length }[d.status] || 0;
+    const isDone = (k, i) => !!upd[k] || i < byStatus;
+    const firstPending = STEPS.findIndex(([k], i) => !isDone(k, i));
     const byId = Object.fromEntries(photos.map((p, i) => [p.id, i]));
     document.title = `#${d.code} ${d.name} · RATTANA HELP`;
 
     const timeline = STEPS.map(([k, label], i) => {
-      const u = upd[k];
+      const u = upd[k], done = isDone(k, i);
+      const date = u?.update_date || (k === 'deliver' && d.status === 'delivered' ? d.delivery_date : null);
       const stepPhotos = u?.photo_id && byId[u.photo_id] !== undefined ? [byId[u.photo_id]]
         : photos.map((p, pi) => p.stage === k ? pi : -1).filter(x => x >= 0).slice(0, 3);
-      const cls = u ? 'done' : (i === firstPending && d.status !== 'delivered' ? 'current' : '');
+      const cls = done ? 'done' : (i === firstPending ? 'current' : '');
       return `<li class="tl-step ${cls}">
-        <span class="tl-dot">${u ? '✓' : i + 1}</span>
+        <span class="tl-dot">${done ? '✓' : i + 1}</span>
         <div>
-          <div class="tl-head"><h4>${i + 1}. ${label}</h4>${u?.update_date ? `<span class="tl-date">${fmtDate(u.update_date)}</span>` : ''}${cls === 'current' ? '<span class="tl-state">ขั้นตอนถัดไป</span>' : ''}</div>
-          ${u?.note ? `<p class="tl-note">${esc(u.note)}</p>` : (!u ? '<p class="tl-note">ยังไม่ถึงขั้นตอนนี้</p>' : '')}
-          ${u && stepPhotos.length ? `<div class="tl-photos">${stepPhotos.map(pi => `<button type="button" data-ph="${pi}" aria-label="ดูภาพ">${img(photos[pi].thumb_path, photos[pi].caption)}</button>`).join('')}</div>` : ''}
+          <div class="tl-head"><h4>${i + 1}. ${label}</h4>${date ? `<span class="tl-date">${fmtDate(date)}</span>` : ''}${cls === 'current' ? '<span class="tl-state">ขั้นตอนถัดไป</span>' : ''}</div>
+          ${u?.note ? `<p class="tl-note">${esc(u.note)}</p>` : (!done ? '<p class="tl-note">ยังไม่ถึงขั้นตอนนี้</p>' : '')}
+          ${done && stepPhotos.length ? `<div class="tl-photos">${stepPhotos.map(pi => `<button type="button" data-ph="${pi}" aria-label="ดูภาพ">${img(photos[pi].thumb_path, photos[pi].caption)}</button>`).join('')}</div>` : ''}
         </div></li>`;
     }).join('');
 
