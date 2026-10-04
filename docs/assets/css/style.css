@@ -783,7 +783,7 @@ body.is-map .line-fab, body.no-scroll .line-fab { display: none; }
 .shr-head b { display: block; font-size: 18px; font-weight: 800; color: var(--indigo-900); }
 .shr-head small { color: var(--muted); font-size: 13px; }
 .shr-x { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--sky-50, #F1F8FF); color: var(--indigo-900); flex-shrink: 0; }
-.shr-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.shr-tabs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
 .shr-tabs button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 16px; border: 1.5px solid var(--line, #E3ECF7); background: #fff; color: var(--muted); font-size: 12px; font-weight: 700; line-height: 1.25; text-align: center; transition: all .25s var(--ease-spring); }
 .shr-tabs button .ic { width: 20px; height: 20px; }
 .shr-tabs button small { font-size: 10.5px; font-weight: 500; opacity: .75; font-variant-numeric: tabular-nums; }
@@ -891,3 +891,11 @@ body.is-map .line-fab, body.no-scroll .line-fab { display: none; }
 .don-msg { font-size: 13px; color: var(--indigo-800); font-style: italic; line-height: 1.5; margin: 2px 0; }
 .page-head.has-bubbles .container { position: relative; z-index: 2; }
 @media (min-width: 900px) { .page-head.has-bubbles .container p { max-width: 52%; } }
+
+/* LINE in the share sheet */
+.shr-tabs .app-line[aria-selected="true"] { background: linear-gradient(135deg, #1FD16A, #06C755); box-shadow: 0 10px 20px -10px rgba(6, 199, 85, .85); }
+.shr-acts .shr-line { grid-column: 1 / -1; justify-content: center; min-height: 46px; color: #fff; font-weight: 700; background: linear-gradient(135deg, #1FD16A, #06C755); border: 0; box-shadow: 0 10px 22px -10px rgba(6, 199, 85, .9); }
+.shr-acts .shr-line[hidden] { display: none; }
+.shr-acts .shr-line .ic { width: 20px; height: 20px; }
+@media (max-width: 899px) { .shr-tabs button { padding: 7px 2px; font-size: 11px; } .shr-tabs button small { font-size: 9.5px; } }
+@media (min-width: 900px) { .shr-tabs .app-line { grid-column: 1 / -1; } }

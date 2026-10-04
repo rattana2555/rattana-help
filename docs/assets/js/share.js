@@ -9,10 +9,13 @@
     { key: 'fbStory', label: 'Facebook Story', app: 'fb', w: 1080, h: 1920, kind: 'story' },
     { key: 'igPost', label: 'IG Post', app: 'ig', w: 1080, h: 1350, kind: 'post' },
     { key: 'fbPost', label: 'Facebook Post', app: 'fb', w: 1080, h: 1080, kind: 'square' },
+    { key: 'line', label: 'LINE', app: 'line', w: 1080, h: 1350, kind: 'post' },
   ];
+  const APP_NAME = { ig: 'Instagram', fb: 'Facebook', line: 'LINE' };
   const APP_ICON = {
     ig: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.4" cy="6.6" r=".9" fill="currentColor" stroke="none"/></svg>',
     fb: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" stroke="none" d="M13.5 21v-7.5h2.6l.4-3h-3V8.6c0-.9.3-1.5 1.5-1.5h1.6V4.4c-.3 0-1.2-.1-2.3-.1-2.3 0-3.9 1.4-3.9 4v2.2H7.8v3h2.6V21z"/></svg>',
+    line: '<svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" stroke="none" d="M12 3C6.48 3 2 6.6 2 11.05c0 3.98 3.55 7.32 8.35 7.95.33.07.77.22.88.5.1.25.07.65.03.9l-.14.86c-.04.25-.2 1 .88.54 1.07-.45 5.8-3.42 7.92-5.85C21.38 14.33 22 12.76 22 11.05 22 6.6 17.52 3 12 3z"/></svg>',
   };
 
   const FONT = 'Inter, "Noto Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -465,6 +468,7 @@
           <button type="button" class="btn btn-gold shr-go"></button>
           <button type="button" class="btn btn-outline shr-save">${icon('download')} บันทึกรูป</button>
           <button type="button" class="btn btn-outline shr-copy">${icon('copy')} คัดลอกข้อความ</button>
+          <button type="button" class="btn shr-line" hidden>${APP_ICON.line} ส่งลิงก์ + ข้อความทาง LINE</button>
         </div>
         <p class="shr-hint"></p>
       </div>`;
@@ -476,6 +480,14 @@
     el.querySelector('.shr-save').onclick = () => save();
     el.querySelector('.shr-copy').onclick = async () => toast(await copyText(caption(cur.data)) ? 'คัดลอกข้อความแล้ว — วางเป็นแคปชันได้เลย' : 'คัดลอกไม่สำเร็จ', 'success');
     el.querySelector('.shr-go').onclick = () => share();
+    // LINE: open LINE with the caption + link to this page (phone → LINE app · computer → LINE's share page)
+    el.querySelector('.shr-line').onclick = () => {
+      const d = cur.data;
+      const url = window.matchMedia('(pointer: coarse)').matches
+        ? `https://line.me/R/share?text=${encodeURIComponent(caption(d))}`
+        : `https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(d.link)}&text=${encodeURIComponent(d.title)}`;
+      window.open(url, '_blank', 'noopener');
+    };
     el.querySelector('.shr-pics-row').onclick = e => {
       const b = e.target.closest('[data-pic]'); if (!b) return;
       const u = cur.data.photos[+b.dataset.pic].full, at = cur.data.picked.indexOf(u);
@@ -509,9 +521,13 @@
     const files = canShareFiles();
     el.querySelector('.shr-go').innerHTML = files ? `${APP_ICON[f.app]} แชร์ไป ${f.label}` : `${icon('download')} บันทึกรูปสำหรับ ${f.label}`;
     el.querySelector('.shr-save').hidden = !files;
-    el.querySelector('.shr-hint').textContent = files
-      ? `กด “แชร์” แล้วเลือก ${f.app === 'ig' ? 'Instagram' : 'Facebook'}${f.kind === 'story' ? ' → Story' : ''} · ข้อความแคปชันจะถูกคัดลอกไว้ให้วางได้ทันที`
-      : `บันทึกรูปแล้วอัปโหลดใน ${f.app === 'ig' ? 'Instagram' : 'Facebook'}${f.kind === 'story' ? ' Story' : ''} · ข้อความแคปชันจะถูกคัดลอกไว้ให้`;
+    el.querySelector('.shr-line').hidden = f.app !== 'line';
+    const appName = APP_NAME[f.app];
+    el.querySelector('.shr-hint').textContent = f.app === 'line'
+      ? (files ? 'กด “แชร์” แล้วเลือก LINE เพื่อส่งรูปให้เพื่อนหรือกลุ่ม · หรือส่งเป็นลิงก์พร้อมข้อความด้วยปุ่มสีเขียว' : 'บันทึกรูปแล้วส่งใน LINE · หรือกดปุ่มสีเขียวเพื่อส่งลิงก์พร้อมข้อความ')
+      : files
+        ? `กด “แชร์” แล้วเลือก ${appName}${f.kind === 'story' ? ' → Story' : ''} · ข้อความแคปชันจะถูกคัดลอกไว้ให้วางได้ทันที`
+        : `บันทึกรูปแล้วอัปโหลดใน ${appName}${f.kind === 'story' ? ' Story' : ''} · ข้อความแคปชันจะถูกคัดลอกไว้ให้`;
     try {
       const b = await blobFor(f);
       if (cur.fmt !== f) return;
