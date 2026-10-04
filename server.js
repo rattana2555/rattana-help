@@ -83,7 +83,7 @@ const idParam = v => { const n = int(v); if (!n || n < 1) throw new HttpError(40
 
 // ─────────────────────────── queries ───────────────────────────
 const LOC_SELECT = `
-  SELECT l.*, p.round_no, p.name AS project_name, p.status AS project_status, p.category AS project_category,
+  SELECT l.*, p.round_no, p.name AS project_name, p.status AS project_status, p.category AS project_category, p.help_type AS project_help_type,
          pv.name_th AS province, d.name_th AS district, s.name_th AS subdistrict,
          COALESCE(ph.thumb_path, (SELECT thumb_path FROM relief_photos x WHERE x.location_id = l.id ORDER BY (x.stage = 'deliver') DESC, x.sort_order, x.id LIMIT 1)) AS cover_thumb,
          COALESCE(ph.file_path,  (SELECT file_path  FROM relief_photos x WHERE x.location_id = l.id ORDER BY (x.stage = 'deliver') DESC, x.sort_order, x.id LIMIT 1)) AS cover_url,
@@ -353,18 +353,18 @@ function projectInput(b) {
   return [
     reqStr(b.round_no, 'รอบที่', 20), reqStr(b.name, 'ชื่อโครงการ', 200), str(b.summary, 500), str(b.description, 5000),
     oneOf(b.status, STATUSES, 'preparing'), date(b.start_date), date(b.end_date), str(b.supporters, 1000), b.is_published === false || b.is_published === 0 ? 0 : 1,
-    oneOf(b.category, CATEGORY_KEYS, 'flood'),
+    oneOf(b.category, CATEGORY_KEYS, 'flood'), oneOf(b.help_type, ['items', 'service'], 'items'),
   ];
 }
 route('GET', '/api/admin/projects', (req, res) => json(res, 200, projectAggregates('1=1')), { field: true });
 route('POST', '/api/admin/projects', async (req, res) => {
   const v = projectInput(await readBody(req, 100_000));
-  const r = db.prepare('INSERT INTO relief_projects (round_no, name, summary, description, status, start_date, end_date, supporters, is_published, category) VALUES (?,?,?,?,?,?,?,?,?,?)').run(...v);
+  const r = db.prepare('INSERT INTO relief_projects (round_no, name, summary, description, status, start_date, end_date, supporters, is_published, category, help_type) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(...v);
   json(res, 201, { id: Number(r.lastInsertRowid) });
 });
 route('PUT', '/api/admin/projects/(\\d+)', async (req, res, [id]) => {
   const v = projectInput(await readBody(req, 100_000));
-  const r = db.prepare("UPDATE relief_projects SET round_no=?, name=?, summary=?, description=?, status=?, start_date=?, end_date=?, supporters=?, is_published=?, category=?, updated_at=datetime('now') WHERE id=?").run(...v, idParam(id));
+  const r = db.prepare("UPDATE relief_projects SET round_no=?, name=?, summary=?, description=?, status=?, start_date=?, end_date=?, supporters=?, is_published=?, category=?, help_type=?, updated_at=datetime('now') WHERE id=?").run(...v, idParam(id));
   if (!r.changes) throw new HttpError(404, 'ไม่พบโครงการ');
   json(res, 200, { ok: true });
 });

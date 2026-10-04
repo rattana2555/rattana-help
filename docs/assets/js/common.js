@@ -85,9 +85,32 @@
   };
   const category = k => CATEGORIES[k] || CATEGORIES.flood;
   const catChip = k => { const c = category(k); return `<span class="chip chip-cat"><span class="chip-ic" aria-hidden="true">${c.icon}</span>${esc(c.label)}</span>`; };
-  const statusChip = (s, long = false) => {
+  // ── Kind of help per project ──
+  // items = handing over goods (counted in pieces) · service = a service/activity such as a free parking area,
+  // a kitchen, shelter or a medical unit: no item list, and steps/status read in service words.
+  const HELP_TYPES = {
+    items: { label: 'ส่งมอบสิ่งของ', hint: 'เช่น ถุงยังชีพ น้ำดื่ม ข้าวสาร — นับจำนวนชิ้น', icon: 'box' },
+    service: { label: 'ให้บริการ / กิจกรรม', hint: 'เช่น จุดจอดรถฟรี โรงครัว ที่พักพิง หน่วยแพทย์', icon: 'heart' },
+  };
+  const helpType = t => (t === 'service' ? 'service' : 'items');
+  const SERVICE_STEPS = [
+    ['support', 'รับเรื่องและวางแผน'], ['collect', 'เตรียมสถานที่และทีมงาน'], ['prepare', 'แจ้งข่าวให้ผู้ประสบภัย'],
+    ['transit', 'เปิดให้บริการ'], ['deliver', 'ให้บริการผู้ประสบภัยแล้ว'],
+  ];
+  const stepsFor = t => (helpType(t) === 'service' ? SERVICE_STEPS : STEPS);
+  const SERVICE_STATUS = {
+    preparing: { label: 'กำลังเตรียม', long: 'กำลังเตรียมการ' },
+    in_transit: { label: 'กำลังให้บริการ', long: 'กำลังให้บริการ' },
+    delivered: { label: 'ให้บริการแล้ว', long: 'ให้บริการแล้ว' },
+  };
+  /** Status label for a point/project — service projects read "กำลังให้บริการ / ให้บริการแล้ว" */
+  const statusLabel = (s, type, long = false) => {
+    const m = (helpType(type) === 'service' ? SERVICE_STATUS : STATUS)[s] || STATUS.preparing;
+    return long ? m.long : m.label;
+  };
+  const statusChip = (s, long = false, type) => {
     const m = STATUS[s] || STATUS.preparing;
-    return `<span class="chip chip-${esc(s)}"><span class="chip-ic" aria-hidden="true">${m.icon}</span>${esc(long ? m.long : m.label)}</span>`;
+    return `<span class="chip chip-${esc(s)}"><span class="chip-ic" aria-hidden="true">${m.icon}</span>${esc(statusLabel(s, type, long))}</span>`;
   };
   const locTitle = l => `จุดส่งต่อความช่วยเหลือ #${esc(l.code)}`;
 
@@ -482,5 +505,5 @@
     });
   }
 
-  window.RH = { api, esc, fmtNum, pieces, perUnit, unitName, fmtDate, fmtDateRange, todayISO, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, locTitle, toast, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG };
+  window.RH = { api, esc, fmtNum, pieces, perUnit, unitName, HELP_TYPES, helpType, stepsFor, statusLabel, fmtDate, fmtDateRange, todayISO, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, locTitle, toast, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG };
 })();

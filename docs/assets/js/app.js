@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   const { ShareCard } = window.RH;
-  const { api, esc, fmtNum, pieces, unitName, fmtDate, fmtDateRange, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, locTitle, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG } = window.RH;
+  const { api, esc, fmtNum, pieces, unitName, HELP_TYPES, helpType, stepsFor, fmtDate, fmtDateRange, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, locTitle, icon, SearchSelect, Lightbox, makeMap, pinHtml, pinIcon, setPinSelected, countUp, enhance, navIndicator, reduceMotion, lineUrl, lineBtn, LINE_ICON, CFG } = window.RH;
   let view = document.getElementById('view');
   let cleanups = [];
   let renderId = 0;
@@ -27,7 +27,10 @@
     const p = pieces(q, unit, name), u = unitName(unit);
     return p !== (Number(q) || 0) ? `${fmtNum(q)} ${esc(u)} · ${fmtNum(p)} ชิ้น` : `${fmtNum(q)} ${esc(u)}`;
   };
-  const unitLabel = l => l.status === 'delivered' ? 'วันที่ส่งมอบ' : 'กำหนดส่งมอบ';
+  const isService = x => helpType(x && (x.project_help_type || x.help_type)) === 'service';
+  const unitLabel = l => isService(l)
+    ? (l.status === 'delivered' ? 'วันที่ให้บริการ' : 'กำหนดให้บริการ')
+    : (l.status === 'delivered' ? 'วันที่ส่งมอบ' : 'กำหนดส่งมอบ');
 
   // ─────────────── shared blocks ───────────────
   // LINE OA call-to-action (support / ordering happens there, not in this app)
@@ -56,7 +59,7 @@
 
   function locCard(l) {
     return `<a class="loc-card" href="#/locations/${l.id}">
-      <div class="ph">${img(l.cover_thumb, l.name)}${statusChip(l.status)}<span class="cat-badge" title="${esc(category(l.project_category).label)}">${category(l.project_category).icon}</span></div>
+      <div class="ph">${img(l.cover_thumb, l.name)}${statusChip(l.status, false, l.project_help_type)}<span class="cat-badge" title="${esc(category(l.project_category).label)}">${category(l.project_category).icon}</span></div>
       <div class="bd">
         <span class="loc-code">${locTitle(l)}</span>
         <span class="loc-name">${esc(l.name)}</span>
@@ -74,7 +77,7 @@
       <div class="ph">${img(p.cover_thumb, p.name)}</div>
       <div class="bd">
         <div class="flex-between" style="display:flex;justify-content:space-between;gap:8px;align-items:center">
-          <span class="proj-round">รอบที่ ${esc(p.round_no)}</span>${statusChip(p.status, true)}
+          <span class="proj-round">รอบที่ ${esc(p.round_no)}</span>${statusChip(p.status, true, p.help_type)}
         </div>
         <div>${catChip(p.category)}</div>
         <span class="proj-name">${esc(p.name)}</span>
@@ -331,7 +334,7 @@
           <span class="tx">
             <span class="nm">#${esc(l.code)} · ${esc(l.name)}</span>
             <span class="ar">${esc(areaText(l))}</span>
-            <span class="ft">${statusChip(l.status)}<span>${fmtDate(l.delivery_date)}</span></span>
+            <span class="ft">${statusChip(l.status, false, l.project_help_type)}<span>${fmtDate(l.delivery_date)}</span></span>
           </span></button></li>`).join('')
         : `<li>${emptyState('ไม่พบจุดช่วยเหลือ', 'ลองเปลี่ยนตัวกรองสถานะหรือพื้นที่', 'pin')}</li>`;
     }
@@ -430,7 +433,7 @@
     const extra = photos.length - shown.length;
     return `
       <button type="button" class="dcard-back">${icon('back')} กลับไปที่รายการ</button>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${statusChip(d.status, true)}${catChip(d.project_category)}<span style="flex:1"></span>${ShareCard.button('on-light js-share')}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${statusChip(d.status, true, d.project_help_type)}${catChip(d.project_category)}<span style="flex:1"></span>${ShareCard.button('on-light js-share')}</div>
       <h2 class="dcard-title" style="margin-top:8px">${locTitle(d)}</h2>
       <p class="dcard-name">${esc(d.name)} · รอบที่ ${esc(d.round_no)}</p>
       ${shown.length ? `<div class="dcard-photos n${shown.length}">${shown.map((p, i) => `
@@ -438,14 +441,15 @@
       <ul class="facts">
         <li><span class="em">📍</span><div><div class="k">พื้นที่</div><div class="v">${areaLines(d)}</div></div></li>
         <li><span class="em">📅</span><div><div class="k">${unitLabel(d)}</div><div class="v">${fmtDate(d.delivery_date)}</div></div></li>
-        <li><span class="em">📦</span><div><div class="k">สิ่งของที่ส่งมอบ</div>
-          ${d.items.length ? `<ul class="item-list">${d.items.map(i => `<li><span>${esc(i.name)}</span><b>${qtyText(i.quantity, i.unit, i.name)}</b></li>`).join('')}</ul>` : '<div class="v">-</div>'}</div></li>
+        ${isService(d) ? `<li><span class="em">🤝</span><div><div class="k">รูปแบบความช่วยเหลือ</div><div class="v">${esc(HELP_TYPES.service.label)}</div></div></li>`
+          : `<li><span class="em">📦</span><div><div class="k">สิ่งของที่ส่งมอบ</div>
+          ${d.items.length ? `<ul class="item-list">${d.items.map(i => `<li><span>${esc(i.name)}</span><b>${qtyText(i.quantity, i.unit, i.name)}</b></li>`).join('')}</ul>` : '<div class="v">-</div>'}</div></li>`}
         <li><span class="em">👥</span><div><div class="k">จำนวนผู้ได้รับความช่วยเหลือ${d.status === 'delivered' ? '' : ' (เป้าหมาย)'}</div><div class="v big">${fmtNum(d.beneficiaries)} คน</div></div></li>
-        <li><span class="em">${d.status === 'delivered' ? '✅' : STATUS[d.status].icon}</span><div><div class="k">สถานะ</div><div class="v">${statusChip(d.status, true)}</div></div></li>
+        <li><span class="em">${d.status === 'delivered' ? '✅' : STATUS[d.status].icon}</span><div><div class="k">สถานะ</div><div class="v">${statusChip(d.status, true, d.project_help_type)}</div></div></li>
       </ul>
       ${lineUrl() ? `<a class="dcard-line" href="${esc(lineUrl())}" target="_blank" rel="noopener">${LINE_ICON}<span>อยากร่วมส่งต่อความช่วยเหลือ? <b>แอดไลน์ ${esc(CFG.lineOa.id || '')}</b></span></a>` : ''}
       <div class="dcard-actions">
-        <button type="button" class="btn btn-gold js-photos"${photos.length ? '' : ' disabled style="opacity:.5"'}>${icon('image')} ${photos.length ? 'ดูภาพการส่งมอบ' : 'ยังไม่มีภาพ'}</button>
+        <button type="button" class="btn btn-gold js-photos"${photos.length ? '' : ' disabled style="opacity:.5"'}>${icon('image')} ${photos.length ? (isService(d) ? 'ดูภาพการช่วยเหลือ' : 'ดูภาพการส่งมอบ') : 'ยังไม่มีภาพ'}</button>
         <a class="btn btn-outline" href="#/locations/${d.id}">ดูรายละเอียดเพิ่มเติม ${icon('arrow')}</a>
       </div>`;
   }
@@ -459,13 +463,14 @@
     // Steps already passed follow from the status, so a point marked "ส่งมอบแล้ว" shows all 5 steps done even when
     // the team didn't fill each step in: กำลังเตรียม = 1–2 · กำลังนำส่ง = 1–4 · ส่งมอบแล้ว = 1–5.
     // Dates / notes entered in the admin are still shown on their step.
-    const byStatus = { preparing: 2, in_transit: 4, delivered: STEPS.length }[d.status] || 0;
+    const svc = isService(d), steps = stepsFor(d.project_help_type);
+    const byStatus = { preparing: 2, in_transit: 4, delivered: steps.length }[d.status] || 0;
     const isDone = (k, i) => !!upd[k] || i < byStatus;
-    const firstPending = STEPS.findIndex(([k], i) => !isDone(k, i));
+    const firstPending = steps.findIndex(([k], i) => !isDone(k, i));
     const byId = Object.fromEntries(photos.map((p, i) => [p.id, i]));
     document.title = `#${d.code} ${d.name} · RATTANA HELP`;
 
-    const timeline = STEPS.map(([k, label], i) => {
+    const timeline = steps.map(([k, label], i) => {
       const u = upd[k], done = isDone(k, i);
       const date = u?.update_date || (k === 'deliver' && d.status === 'delivered' ? d.delivery_date : null);
       const stepPhotos = u?.photo_id && byId[u.photo_id] !== undefined ? [byId[u.photo_id]]
@@ -490,7 +495,7 @@
           <nav class="crumbs" aria-label="breadcrumb"><a href="#/projects">โครงการ</a><span class="sep">›</span><a href="#/projects/${d.project_id}">รอบที่ ${esc(d.round_no)}</a><span class="sep">›</span><span>#${esc(d.code)}</span></nav>
           <h1>${locTitle(d)}</h1>
           <p class="sub">${esc(d.name)}</p>
-          <div class="row">${statusChip(d.status, true)}<span class="chip chip-round">รอบที่ ${esc(d.round_no)}</span>${catChip(d.project_category)}</div>
+          <div class="row">${statusChip(d.status, true, d.project_help_type)}<span class="chip chip-round">รอบที่ ${esc(d.round_no)}</span>${catChip(d.project_category)}</div>
           <div class="row">${ShareCard.button('js-share')}</div>
         </div>
       </section>
@@ -500,10 +505,10 @@
           <div class="detail-main">
             ${d.description ? `<div class="card card-pad"><h3 class="card-title">${icon('heart')} รายละเอียด</h3><p class="prose">${esc(d.description)}</p></div>` : ''}
 
-            <div class="card card-pad">
+            ${svc ? '' : `<div class="card card-pad">
               <h3 class="card-title">${icon('box')} สิ่งของที่ส่งมอบ</h3>
               ${d.items.length ? `<table class="items-table"><tbody>${d.items.map(i => `<tr><td><span class="dot"></span>${esc(i.name)}</td><td class="q">${fmtNum(i.quantity)}<small>${esc(unitName(i.unit))}${pieces(i.quantity, i.unit, i.name) !== (i.quantity || 0) ? ` · ${fmtNum(pieces(i.quantity, i.unit, i.name))} ชิ้น` : ''}</small></td></tr>`).join('')}</tbody></table>` : '<p class="txt-muted">ยังไม่มีรายการสิ่งของ</p>'}
-            </div>
+            </div>`}
 
             <div class="card card-pad">
               <h3 class="card-title">${icon('truck')} ขั้นตอนการช่วยเหลือ</h3>
@@ -531,7 +536,7 @@
                 <li><span class="k">รอบการช่วยเหลือ</span><span class="v">รอบที่ ${esc(d.round_no)}</span></li>
                 <li><span class="k">${unitLabel(d)}</span><span class="v">${fmtDate(d.delivery_date)}</span></li>
                 <li><span class="k">พื้นที่</span><span class="v">${areaLines(d)}</span></li>
-                <li><span class="k">สิ่งของรวม</span><span class="v">${fmtNum(d.items_total)} ชิ้น</span></li>
+                ${svc ? `<li><span class="k">รูปแบบ</span><span class="v">${esc(HELP_TYPES.service.label)}</span></li>` : `<li><span class="k">สิ่งของรวม</span><span class="v">${fmtNum(d.items_total)} ชิ้น</span></li>`}
                 ${d.supporters ? `<li><span class="k">ผู้ร่วมสนับสนุน</span><span class="v">${esc(d.supporters)}</span></li>` : ''}
               </ul>
             </div>
@@ -630,7 +635,7 @@
     view.innerHTML = `
       <section class="page-head"><div class="container">
         <nav class="crumbs"><a href="#/projects">โครงการ</a><span class="sep">›</span><span>รอบที่ ${esc(p.round_no)}</span></nav>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span class="chip chip-round">รอบที่ ${esc(p.round_no)}</span>${statusChip(p.status, true)}${catChip(p.category)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><span class="chip chip-round">รอบที่ ${esc(p.round_no)}</span>${statusChip(p.status, true, p.help_type)}${catChip(p.category)}</div>
         <h1>${esc(p.name)}</h1>
         ${p.summary ? `<p>${esc(p.summary)}</p>` : ''}
         <div class="meta-row" style="color:rgba(255,255,255,.75);margin-top:10px">
@@ -643,7 +648,8 @@
         <div class="stat-grid">
           <div class="stat"><div class="stat-v">${fmtNum(p.location_count)}<small>จุด</small></div><div class="stat-l">จุดช่วยเหลือ</div><div class="stat-s">ส่งมอบแล้ว ${p.delivered_count} จุด</div></div>
           <div class="stat"><div class="stat-v">${pct}<small>%</small></div><div class="stat-l">ความคืบหน้า</div><div class="progress" style="margin-top:8px"><i style="--w:${pct}%"></i></div></div>
-          <div class="stat"><div class="stat-v">${fmtNum(p.items_total)}<small>ชิ้น</small></div><div class="stat-l">สิ่งของในรอบนี้</div><div class="stat-s">รวมทุกจุด</div></div>
+          ${isService(p) ? `<div class="stat"><div class="stat-v">${fmtNum(p.photo_count)}<small>ภาพ</small></div><div class="stat-l">ภาพจากหน้างาน</div><div class="stat-s">${esc(HELP_TYPES.service.label)}</div></div>`
+            : `<div class="stat"><div class="stat-v">${fmtNum(p.items_total)}<small>ชิ้น</small></div><div class="stat-l">สิ่งของในรอบนี้</div><div class="stat-s">รวมทุกจุด</div></div>`}
           <div class="stat"><div class="stat-v">${fmtNum(p.beneficiaries)}<small>คน</small></div><div class="stat-l">ผู้ได้รับความช่วยเหลือ</div><div class="stat-s">เป้าหมาย ${fmtNum(p.beneficiaries_planned)} คน</div></div>
         </div>
 
@@ -659,7 +665,8 @@
                 <li><span class="k">รอบการช่วยเหลือ</span><span class="v">รอบที่ ${esc(p.round_no)}</span></li>
                 <li><span class="k">วันที่</span><span class="v">${fmtDateRange(p.start_date || p.first_date, p.end_date || p.last_date)}</span></li>
                 <li><span class="k">พื้นที่</span><span class="v">${esc(p.provinces || '-')}</span></li>
-                <li><span class="k">สถานะ</span><span class="v">${statusChip(p.status, true)}</span></li>
+                <li><span class="k">สถานะ</span><span class="v">${statusChip(p.status, true, p.help_type)}</span></li>
+                <li><span class="k">รูปแบบ</span><span class="v">${esc(HELP_TYPES[helpType(p.help_type)].label)}</span></li>
                 ${p.supporters ? `<li><span class="k">ผู้ร่วมสนับสนุน</span><span class="v">${esc(p.supporters)}</span></li>` : ''}
               </ul>
             </div>
@@ -878,7 +885,7 @@
               <li><a href="#/projects/${p.id}">
                 <span class="rn"><span><small>รอบที่</small>${esc(p.round_no)}</span></span>
                 <span><span class="nm">${esc(p.name)}</span><br><span class="sb">${p.delivered_count}/${p.location_count} จุด · ${fmtNum(p.beneficiaries)} คน · ${fmtDateRange(p.first_date || p.start_date, p.last_date || p.end_date)}</span></span>
-                ${statusChip(p.status)}
+                ${statusChip(p.status, false, p.help_type)}
               </a></li>`).join('') || '<li>' + emptyState('ยังไม่มีโครงการ', '', 'folder') + '</li>'}</ul>
           </div>
           <div class="card card-pad">
@@ -887,7 +894,7 @@
               <li><a class="loc-row" href="#/locations/${l.id}">
                 <span class="th">${img(l.cover_thumb, '')}</span>
                 <span class="tx"><span class="nm">#${esc(l.code)} · ${esc(l.name)}</span><span class="ar">${esc(areaText(l))}</span>
-                <span class="ft">${statusChip(l.status)}<span>${fmtDate(l.delivery_date)}</span></span></span></a></li>`).join('')}</ul>
+                <span class="ft">${statusChip(l.status, false, l.project_help_type)}<span>${fmtDate(l.delivery_date)}</span></span></span></a></li>`).join('')}</ul>
           </div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:8px">

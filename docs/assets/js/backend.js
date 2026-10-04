@@ -148,7 +148,7 @@
       projects: d.projects || [], locations: d.locations || [], items: d.items || [], photos: d.photos || [], updates: d.updates || [],
       provinces: d.provinces || [], districts: d.districts || [], subdistricts: d.subdistricts || [], admins: d.admins || [],
     };
-    db.projects.forEach(p => { if (!p.category) p.category = 'flood'; });
+    db.projects.forEach(p => { if (!p.category) p.category = 'flood'; p.help_type = RH.helpType(p.help_type); });
     const P = byKey(db.projects), PV = byKey(db.provinces), D = byKey(db.districts), S = byKey(db.subdistricts);
     const people = new Map((d.people || []).map(x => [x.id, x.name]));
     const L = byKey(db.locations);
@@ -172,7 +172,7 @@
       const fallback = [...ph].sort((a, b) => ((b.stage === 'deliver') - (a.stage === 'deliver')) || ((a.sort_order || 0) - (b.sort_order || 0)) || (a.id - b.id))[0];
       const cover = ph.find(p => p.id === l.cover_photo_id) || fallback;
       Object.assign(l, {
-        round_no: pr.round_no, project_name: pr.name, project_status: pr.status, project_category: pr.category || 'flood',
+        round_no: pr.round_no, project_name: pr.name, project_status: pr.status, project_category: pr.category || 'flood', project_help_type: RH.helpType(pr.help_type),
         province: PV.get(l.province_id)?.name_th || null, district: D.get(l.district_id)?.name_th || null, subdistrict: S.get(l.subdistrict_id)?.name_th || null,
         cover_thumb: cover ? cover.thumb_path : null, cover_url: cover ? cover.file_path : null,
         photo_count: ph.length, items_total: (itemsBy.get(l.id) || []).reduce((s, i) => s + pcs(i), 0),

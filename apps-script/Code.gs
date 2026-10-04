@@ -22,11 +22,13 @@ var STEPS = ['support', 'collect', 'prepare', 'transit', 'deliver'];
 var ROLES = ['super', 'field'];
 // Project types (keep in sync with CATEGORIES in docs/assets/js/common.js)
 var CATEGORY_KEYS = ['flood', 'drought', 'fire', 'storm', 'cold', 'community', 'education', 'health', 'other'];
-var API_VERSION = 4;
+/** items = handing over goods · service = a service/activity (free parking, kitchen, shelter, medical unit…) */
+var HELP_TYPES = ['items', 'service'];
+var API_VERSION = 5;
 
 var TABLES = {
   // New columns are only ever appended at the end (ensureSchema_ adds them to existing sheets)
-  projects: ['id', 'round_no', 'name', 'summary', 'description', 'status', 'start_date', 'end_date', 'supporters', 'is_published', 'created_at', 'updated_at', 'category'],
+  projects: ['id', 'round_no', 'name', 'summary', 'description', 'status', 'start_date', 'end_date', 'supporters', 'is_published', 'created_at', 'updated_at', 'category', 'help_type'],
   locations: ['id', 'project_id', 'code', 'name', 'province_id', 'district_id', 'subdistrict_id', 'village', 'lat', 'lng', 'delivery_date', 'status', 'description', 'beneficiaries', 'households', 'supporters', 'cover_photo_id', 'created_at', 'updated_at'],
   items: ['id', 'location_id', 'name', 'quantity', 'unit', 'sort_order'],
   photos: ['id', 'location_id', 'stage', 'file_id', 'caption', 'taken_date', 'width', 'height', 'sort_order', 'uploaded_by', 'created_at'],
@@ -229,10 +231,19 @@ function nextId_(name) {
   props.setProperty(key, String(cur + 1));
   return cur + 1;
 }
+// Column order as it is in the sheet (new columns are appended over time): write cells by header name, not position
+var _head = {};
+function head_(name) {
+  if (_head[name]) return _head[name];
+  var sh = sheet_(name), n = sh.getLastColumn();
+  var head = n ? sh.getRange(1, 1, 1, n).getValues()[0].map(String) : [];
+  _head[name] = head.length && head[0] ? head : TABLES[name];
+  return _head[name];
+}
 function insert_(name, obj) { return insertMany_(name, [obj])[0]; }
 function insertMany_(name, list) {
   if (!list.length) return [];
-  var head = TABLES[name], sh = sheet_(name), ids = [];
+  var head = head_(name), sh = sheet_(name), ids = [];
   var values = list.map(function (o) { o.id = nextId_(name); ids.push(o.id); return head.map(function (h) { return cell_(o[h]); }); });
   sh.getRange(sh.getLastRow() + 1, 1, values.length, head.length).setValues(values);
   delete _rows[name];
@@ -242,7 +253,7 @@ function find_(name, id) { var list = rows_(name); for (var i = 0; i < list.leng
 function update_(name, id, patch) {
   var row = find_(name, id);
   if (!row) return false;
-  var head = TABLES[name];
+  var head = head_(name);
   Object.keys(patch).forEach(function (k) { row[k] = patch[k]; });
   sheet_(name).getRange(row._row, 1, 1, head.length).setValues([head.map(function (h) { return cell_(row[h]); })]);
   return true;
@@ -388,7 +399,7 @@ function saveProject_(b) {
     round_no: reqStr_(p.round_no, 'รอบที่', 20), name: reqStr_(p.name, 'ชื่อโครงการ', 200), summary: str_(p.summary, 500),
     description: str_(p.description, 5000), status: oneOf_(p.status, STATUSES, 'preparing'), start_date: date_(p.start_date),
     end_date: date_(p.end_date), supporters: str_(p.supporters, 1000), is_published: p.is_published === false || p.is_published === 0 ? 0 : 1,
-    category: oneOf_(p.category, CATEGORY_KEYS, 'flood'), updated_at: now_()
+    category: oneOf_(p.category, CATEGORY_KEYS, 'flood'), help_type: oneOf_(p.help_type, HELP_TYPES, 'items'), updated_at: now_()
   };
   if (b.id) {
     if (!update_('projects', idParam_(b.id), v)) throw err_(404, 'ไม่พบโครงการ');

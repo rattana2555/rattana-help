@@ -292,7 +292,7 @@
       const st = data.status, h = 58 * s, x = phX + 20 * s, y = phY + phH - h - 20 * s;
       if (st === 'delivered') {
         ctx.font = font(800, 25 * s);
-        const label = 'ส่งมอบแล้ว', tw = ctx.measureText(label).width, w = tw + 92 * s;
+        const label = window.RH.statusLabel('delivered', data.helpType), tw = ctx.measureText(label).width, w = tw + 92 * s;
         ctx.save(); ctx.shadowColor = 'rgba(245,174,10,.55)'; ctx.shadowBlur = 24 * s;
         g = ctx.createLinearGradient(x, y, x + w, y + h); g.addColorStop(0, GOLD); g.addColorStop(1, GOLD_D);
         rr(ctx, x, y, w, h, h / 2); ctx.fillStyle = g; ctx.fill(); ctx.restore();
@@ -300,7 +300,7 @@
         drawIcon(ctx, 'check', x + h / 2 + 2 * s - h * .22, y + h / 2 - h * .22, h * .44, '#fff', 3.2);
         ctx.fillStyle = INDIGO; ctx.textBaseline = 'middle'; ctx.fillText(label, x + h + 10 * s, y + h / 2 + 1); ctx.textBaseline = 'alphabetic';
       } else {
-        pill(ctx, x, y, h, st === 'in_transit' ? 'กำลังนำส่ง' : 'กำลังเตรียม', { bg: st === 'in_transit' ? 'rgba(44,150,238,.92)' : 'rgba(255,255,255,.92)', color: st === 'in_transit' ? '#fff' : INDIGO, border: null, weight: 800, size: 25 * s });
+        pill(ctx, x, y, h, window.RH.statusLabel(st === 'in_transit' ? 'in_transit' : 'preparing', data.helpType), { bg: st === 'in_transit' ? 'rgba(44,150,238,.92)' : 'rgba(255,255,255,.92)', color: st === 'in_transit' ? '#fff' : INDIGO, border: null, weight: 800, size: 25 * s });
       }
     }
 
@@ -396,18 +396,20 @@
       .map(x => ({ full: x.file_path, thumb: x.thumb_path || x.file_path }));
   }
   function fromLocation(d) {
-    const items = (d.items || []).filter(i => i.name).map(i => `${i.name} ${fmtNum(i.quantity)}${i.unit ? ` ${window.RH.unitName(i.unit)}` : ''}`).join(' · ');
+    const svc = window.RH.helpType(d.project_help_type) === 'service';
+    const items = svc ? window.RH.HELP_TYPES.service.label : (d.items || []).filter(i => i.name).map(i => `${i.name} ${fmtNum(i.quantity)}${i.unit ? ` ${window.RH.unitName(i.unit)}` : ''}`).join(' · ');
     const delivered = d.status === 'delivered';
     return {
       id: `loc-${d.id}`, eyebrow: delivered ? 'ส่งต่อความช่วยเหลือแล้ว' : 'กำลังส่งต่อความช่วยเหลือ',
       title: d.name, round: d.round_no ? `รอบที่ ${d.round_no}` : '', category: d.project_category, status: d.status,
-      area: areaText(d, true), date: d.delivery_date ? `${delivered ? 'ส่งมอบ' : 'กำหนดส่งมอบ'} ${fmtDate(d.delivery_date)}` : '', items,
+      area: areaText(d, true), date: d.delivery_date ? `${svc ? (delivered ? 'ให้บริการ' : 'กำหนดให้บริการ') : (delivered ? 'ส่งมอบ' : 'กำหนดส่งมอบ')} ${fmtDate(d.delivery_date)}` : '', items,
+      helpType: svc ? 'service' : 'items',
       photo: d.cover_url || (d.photos && d.photos[0] && d.photos[0].file_path),
       photos: photoList(d.photos, d.cover_url),
       stats: [
         d.beneficiaries ? { v: d.beneficiaries, unit: 'คน', label: delivered ? 'ได้รับความช่วยเหลือ' : 'ผู้รับ (เป้าหมาย)' } : null,
         d.households ? { v: d.households, unit: 'ครัวเรือน', label: 'ครัวเรือนที่ได้รับ' } : null,
-        d.items_total ? { v: d.items_total, unit: 'ชิ้น', label: 'สิ่งของที่ส่งต่อ' } : null,
+        !svc && d.items_total ? { v: d.items_total, unit: 'ชิ้น', label: 'สิ่งของที่ส่งต่อ' } : null,
       ],
       link: `${siteBase()}#/locations/${d.id}`,
     };
@@ -421,12 +423,13 @@
       title: p.name, round: p.round_no ? `รอบที่ ${p.round_no}` : '', category: p.category, status: p.status,
       area: p.provinces ? `จังหวัด${p.provinces}` : '', date: fmtDateRange(p.start_date || p.first_date, p.end_date || p.last_date).replace(/^-$/, ''),
       items: p.summary && p.summary !== p.name ? p.summary : '',
+      helpType: window.RH.helpType(p.help_type),
       photo: ph ? ph.file_path : null,
       photos: photoList(p.photos, ph && ph.file_path),
       stats: [
-        p.location_count ? { v: p.delivered_count, unit: `/${fmtNum(p.location_count)} จุด`, label: 'ส่งมอบแล้ว' } : null,
+        p.location_count ? { v: p.delivered_count, unit: `/${fmtNum(p.location_count)} จุด`, label: window.RH.statusLabel('delivered', p.help_type) } : null,
         p.beneficiaries ? { v: p.beneficiaries, unit: 'คน', label: 'ได้รับความช่วยเหลือ' } : null,
-        p.items_total ? { v: p.items_total, unit: 'ชิ้น', label: 'สิ่งของที่ส่งต่อ' } : null,
+        window.RH.helpType(p.help_type) !== 'service' && p.items_total ? { v: p.items_total, unit: 'ชิ้น', label: 'สิ่งของที่ส่งต่อ' } : null,
       ],
       link: `${siteBase()}#/projects/${p.id}`,
     };

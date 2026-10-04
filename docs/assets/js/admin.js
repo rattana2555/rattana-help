@@ -1,7 +1,7 @@
 // RATTANA HELP — Admin dashboard
 (function () {
   'use strict';
-  const { api, esc, fmtNum, pieces, unitName, fmtDate, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, icon, SearchSelect, Lightbox, makeMap, pinIcon, setPinSelected, toast, todayISO, CFG } = window.RH;
+  const { api, esc, fmtNum, pieces, unitName, HELP_TYPES, helpType, stepsFor, statusLabel, fmtDate, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, icon, SearchSelect, Lightbox, makeMap, pinIcon, setPinSelected, toast, todayISO, CFG } = window.RH;
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   let main = $('#adm');
@@ -310,11 +310,12 @@
   }
 
   async function editProject(p) {
-    const v = p || { status: 'preparing', is_published: 1, category: 'flood' };
-    let status = v.status, cat = v.category || 'flood';
+    const v = p || { status: 'preparing', is_published: 1, category: 'flood', help_type: 'items' };
+    let status = v.status, cat = v.category || 'flood', kind = helpType(v.help_type);
     return modal({
       title: p ? `แก้ไขโครงการ รอบที่ ${p.round_no}` : 'เพิ่มโครงการใหม่',
       body: `<div class="form-grid">
+        <div class="field span-2"><span>รูปแบบความช่วยเหลือ</span><div class="help-pick" id="pKind">${Object.entries(HELP_TYPES).map(([k, h]) => `<button type="button" data-k="${k}" class="${k === kind ? 'on' : ''}">${icon(h.icon)}<b>${esc(h.label)}</b><small>${esc(h.hint)}</small></button>`).join('')}</div></div>
         <div class="field span-2"><span>ประเภทโครงการ</span><div class="cat-pick" id="pCat">${Object.entries(CATEGORIES).map(([k, c]) => `<button type="button" data-c="${k}" class="${k === cat ? 'on' : ''}"><span class="ic">${c.icon}</span>${esc(c.label)}</button>`).join('')}</div></div>
         <label class="field"><span>รอบที่ <span class="req">*</span></span><input class="input" name="round_no" value="${esc(v.round_no || '')}" placeholder="เช่น 004" maxlength="20" required></label>
         <div class="field"><span>สถานะ</span><div class="seg-ctl" id="pStatus">${STATUS_KEYS.map(k => `<button type="button" data-v="${k}" class="${k === status ? 'on' : ''}">${STATUS[k].label}</button>`).join('')}</div></div>
@@ -330,9 +331,10 @@
       onOpen: b => {
         $('#pStatus', b).onclick = e => { const t = e.target.closest('[data-v]'); if (!t) return; status = t.dataset.v; $$('#pStatus button', b).forEach(x => x.classList.toggle('on', x === t)); };
         $('#pCat', b).onclick = e => { const t = e.target.closest('[data-c]'); if (!t) return; cat = t.dataset.c; $$('#pCat button', b).forEach(x => x.classList.toggle('on', x === t)); };
+        $('#pKind', b).onclick = e => { const t = e.target.closest('[data-k]'); if (!t) return; kind = t.dataset.k; $$('#pKind button', b).forEach(x => x.classList.toggle('on', x === t)); };
       },
       onSubmit: async f => {
-        const body = { category: cat, round_no: f.round_no.value, name: f.name.value, summary: f.summary.value, description: f.description.value, status, start_date: f.start_date.value, end_date: f.end_date.value, supporters: f.supporters.value, is_published: f.is_published.checked };
+        const body = { category: cat, help_type: kind, round_no: f.round_no.value, name: f.name.value, summary: f.summary.value, description: f.description.value, status, start_date: f.start_date.value, end_date: f.end_date.value, supporters: f.supporters.value, is_published: f.is_published.checked };
         if (!body.round_no.trim() || !body.name.trim()) { toast('กรุณาระบุรอบที่และชื่อโครงการ', 'warning'); return false; }
         const r = p ? await call(`/api/admin/projects/${p.id}`, { method: 'PUT', body }) : await call('/api/admin/projects', { method: 'POST', body });
         toast('บันทึกโครงการแล้ว', 'success');
@@ -525,11 +527,11 @@
           <div class="field"><span>พื้นที่ <span class="hint" id="fAreaHint">กำลังหาชื่อพื้นที่จากพิกัด…</span></span>
             <div class="ws-area"><div id="fProv"></div><input class="input" name="district" placeholder="อำเภอ / เขต"><input class="input" name="subdistrict" placeholder="ตำบล / แขวง"></div></div>
           <div class="ws-2">
-            <label class="field"><span>วันที่ส่งมอบ</span><input class="input" type="date" name="delivery_date" value="${todayISO()}"></label>
+            <label class="field"><span>${helpType(p.help_type) === 'service' ? 'วันที่ให้บริการ' : 'วันที่ส่งมอบ'}</span><input class="input" type="date" name="delivery_date" value="${todayISO()}"></label>
             <label class="field"><span>ผู้ได้รับ (คน)</span><input class="input" type="number" min="0" inputmode="numeric" name="beneficiaries" value="0"></label>
           </div>
           <div class="field"><span>สถานะ</span><div class="seg-ctl" id="fStatus">${STATUS_KEYS.map(k => `<button type="button" data-v="${k}" class="${k === 'preparing' ? 'on' : ''}">${STATUS[k].icon} ${STATUS[k].label}</button>`).join('')}</div></div>
-          <div class="field"><span>สิ่งของ <span class="hint">(พิมพ์ค้นหาสินค้า · เพิ่มทีหลังได้)</span></span>
+          <div class="field"${helpType(p.help_type) === 'service' ? ' hidden' : ''}><span>สิ่งของ <span class="hint">(พิมพ์ค้นหาสินค้า · เพิ่มทีหลังได้)</span></span>
             <div class="items-editor" id="fItems"></div><button type="button" class="btn btn-ghost-dark btn-sm" id="fAddItem" style="align-self:flex-start">${icon('plus')} เพิ่มรายการ</button></div>
           <div class="ws-form-acts"><button type="button" class="btn btn-outline" id="fCancel">ยกเลิก</button><button type="submit" class="btn btn-gold" id="fSave">${icon('check')} บันทึกจุด</button></div>
         </form>`;
@@ -790,7 +792,7 @@ ${field ? `
           <div class="picker-map crosshair" id="pickMap"></div>
         </div></div></section>
 
-        <section class="acard"><div class="acard-head"><h2>${icon('box')} รายการสิ่งของที่ส่งมอบ</h2><button type="button" class="btn btn-outline btn-sm" id="addItem">${icon('plus')} เพิ่มรายการ</button></div>
+        <section class="acard" id="itemsCard"><div class="acard-head"><h2>${icon('box')} รายการสิ่งของที่ส่งมอบ</h2><button type="button" class="btn btn-outline btn-sm" id="addItem">${icon('plus')} เพิ่มรายการ</button></div>
           <div class="acard-body"><p class="items-help">พิมพ์ชื่อสินค้าเพื่อค้นหา แล้วเลือกหน่วยตามสินค้า (เช่น แพ็คx12) — ระบบนับเป็นจำนวนชิ้นให้อัตโนมัติ</p>
           <div class="items-editor" id="items"></div><div class="items-total" style="margin-top:10px"><span>รวมจำนวนสิ่งของ</span><b id="itemsTotal">0</b></div></div></section>
 `}
@@ -811,7 +813,7 @@ ${field ? `
     // Project, area cascade and items are main-admin only
     let areaUI = null; // area pickers (main admin only), used by the pin auto-fill below
     if (!field) {
-    const ssProject = new SearchSelect($('#ssProject'), { value: st.project_id, placeholder: '— เลือกโครงการ —', options: projects.map(p => ({ value: p.id, label: `รอบที่ ${p.round_no} · ${p.name}` })), onChange: v => { st.project_id = Number(v); } });
+    const ssProject = new SearchSelect($('#ssProject'), { value: st.project_id, placeholder: '— เลือกโครงการ —', options: projects.map(p => ({ value: p.id, label: `รอบที่ ${p.round_no} · ${p.name}` })), onChange: v => { st.project_id = Number(v); applyKind(); } });
     // Status
     $('#segStatus').onclick = e => { const t = e.target.closest('[data-v]'); if (!t) return; st.status = t.dataset.v; $$('#segStatus button').forEach(b => b.classList.toggle('on', b === t)); marker && marker.setIcon(pinIcon(st.status, true)); };
 
@@ -946,12 +948,20 @@ ${field ? `
     renderItems();
     }
 
+    // Kind of help of the chosen project: a service project has no item list and service-worded steps
+    function kindOf() { const pr = projects.find(x => x.id === st.project_id); return helpType(pr && pr.help_type); }
+    function applyKind() {
+      const svc = kindOf() === 'service';
+      const card = $('#itemsCard'); if (card) card.hidden = svc;
+      if ($('#tl')) renderTimeline();
+    }
+
     // Timeline
     const tlSS = [];
     onCleanup(() => tlSS.forEach(s => s.destroy()));
     function renderTimeline() {
       tlSS.splice(0).forEach(s => s.destroy());
-      $('#tl').innerHTML = STEPS.map(([k, label], i) => {
+      $('#tl').innerHTML = stepsFor(kindOf()).map(([k, label], i) => {
         const u = st.updates[k] || {};
         return `<div class="tl-row${u.update_date || u.note ? ' filled' : ''}" data-step="${k}"><span class="n">${i + 1}</span><div>
           <h4>${label}</h4>
@@ -976,7 +986,7 @@ ${field ? `
       u[k] = e.target.value;
       row.classList.toggle('filled', !!(u.update_date || u.note));
     });
-    renderTimeline();
+    applyKind(); // draws the timeline in the project's wording and hides items for a service project
 
     // Photos
     st.photos = L0.photos || [];
