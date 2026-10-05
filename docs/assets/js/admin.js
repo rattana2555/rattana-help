@@ -416,6 +416,53 @@
       return { province, district, subdistrict: stripArea(sub || ''), name: r.name || a.amenity || a.building || a.neighbourhood || a.village || a.hamlet || '' };
     } catch { return null; }
   }
+  // ── Place search over the map (OpenStreetMap / Nominatim — free, no key) ──
+  // Type a place and press ค้นหา (or Enter) → pick a result → the pin moves there. A Google Maps link or
+  // "lat, lng" pasted into the box jumps straight to those coordinates. Searches run on demand only (no
+  // search-as-you-type), as Nominatim's usage policy asks.
+  function coordsFrom(text) {
+    const s = String(text || '');
+    const pats = [/!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/, /@(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/, /[?&](?:q|query|ll|destination)=(-?\d{1,2}\.\d+)(?:,|%2C)\s*(-?\d{1,3}\.\d+)/i, /^\s*(-?\d{1,2}\.\d+)\s*[,\s]\s*(-?\d{1,3}\.\d+)\s*$/];
+    for (const re of pats) {
+      const m = re.exec(s);
+      if (m) { const lat = +m[1], lng = +m[2]; if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng }; }
+    }
+    return null;
+  }
+  function placeSearch(el, onPick) {
+    el.innerHTML = `<div class="ps-box"><span class="ps-ic">${icon('search')}</span>
+        <input class="input" type="search" placeholder="ค้นหาสถานที่ เช่น วัดไทร บางคนที · หรือวางลิงก์ Google Maps / พิกัด" aria-label="ค้นหาสถานที่" autocomplete="off" enterkeyhint="search">
+        <button type="button" class="btn btn-navy btn-sm">ค้นหา</button></div>
+      <ul class="ps-list" hidden></ul>`;
+    const input = el.querySelector('input'), btn = el.querySelector('button'), list = el.querySelector('.ps-list');
+    let results = [], seq = 0;
+    const msg = t => { list.hidden = false; list.innerHTML = `<li class="ps-msg">${esc(t)}</li>`; };
+    const pick = r => { list.hidden = true; onPick(r); };
+    async function go() {
+      const q = input.value.trim();
+      if (!q) return input.focus();
+      const c = coordsFrom(q);
+      if (c) return pick({ ...c, name: '', label: `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}` });
+      if (/maps\.app\.goo\.gl|goo\.gl\/maps/i.test(q)) return msg('ลิงก์แบบย่อของ Google Maps เปิดจากที่นี่ไม่ได้ — เปิดลิงก์ใน Google Maps แล้วกดค้างที่หมุดเพื่อคัดลอกพิกัด มาวางที่ช่องนี้');
+      const my = ++seq;
+      msg('กำลังค้นหา…');
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=th&accept-language=th&addressdetails=1&q=${encodeURIComponent(q)}`).then(x => x.json());
+        if (my !== seq) return;
+        results = r.map(x => ({ lat: +x.lat, lng: +x.lon, name: x.name || String(x.display_name || '').split(',')[0], label: x.display_name || '' }));
+        if (!results.length) return msg('ไม่พบสถานที่ — ลองเพิ่มชื่อตำบล/อำเภอ หรือแตะบนแผนที่แทน');
+        list.hidden = false;
+        list.innerHTML = results.map((x, i) => `<li><button type="button" data-i="${i}">${icon('pin')}<span><b>${esc(x.name)}</b><small>${esc(x.label)}</small></span></button></li>`).join('');
+      } catch { if (my === seq) msg('ค้นหาไม่สำเร็จ — ตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง'); }
+    }
+    btn.onclick = go;
+    // Enter searches (and must not submit the surrounding point form)
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go(); } else if (e.key === 'Escape') list.hidden = true; });
+    list.onclick = e => { const b = e.target.closest('[data-i]'); if (b) pick(results[+b.dataset.i]); };
+    const away = e => { if (!el.contains(e.target)) list.hidden = true; };
+    document.addEventListener('click', away);
+    return () => document.removeEventListener('click', away);
+  }
   async function searchPlace(q) {
     const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=th&accept-language=th&q=${encodeURIComponent(q)}`).then(x => x.json());
     return r[0] ? [+r[0].lat, +r[0].lon] : null;
@@ -758,7 +805,7 @@ ${field ? `
             </div>
             <button type="button" class="btn btn-gold" id="btnGps">${icon('navigation')} ใช้ตำแหน่งปัจจุบัน</button>
           </div>
-          <div class="picker-map crosshair" id="pickMap"></div>
+          <div class="map-col"><div class="place-search" id="placeSearch"></div><div class="picker-map crosshair" id="pickMap"></div></div>
         </div></div></section>
 ` : `
         <section class="acard"><div class="acard-head"><h2>${icon('heart')} ข้อมูลหลัก</h2></div><div class="acard-body"><div class="form-grid cols-3">
@@ -789,7 +836,7 @@ ${field ? `
               <button type="button" class="btn btn-outline btn-sm" id="btnGps">${icon('navigation')} ใช้ตำแหน่งปัจจุบัน</button>
             </div>
           </div>
-          <div class="picker-map crosshair" id="pickMap"></div>
+          <div class="map-col"><div class="place-search" id="placeSearch"></div><div class="picker-map crosshair" id="pickMap"></div></div>
         </div></div></section>
 
         <section class="acard" id="itemsCard"><div class="acard-head"><h2>${icon('box')} รายการสิ่งของที่ส่งมอบ</h2><button type="button" class="btn btn-outline btn-sm" id="addItem">${icon('plus')} เพิ่มรายการ</button></div>
@@ -879,17 +926,33 @@ ${field ? `
     if (L0.lat != null && L0.lng != null) setPoint(L0.lat, L0.lng, true); else pm.setView(CFG.mapCenter, CFG.mapZoom);
     const onCoord = () => { const la = parseFloat(form.lat.value), ln = parseFloat(form.lng.value); if (isFinite(la) && isFinite(ln) && Math.abs(la) <= 90 && Math.abs(ln) <= 180) setPoint(la, ln, true, true); };
     form.lat.onchange = onCoord; form.lng.onchange = onCoord;
+    onCleanup(placeSearch($('#placeSearch'), r => {
+      setPoint(r.lat, r.lng, false, true);
+      pm.setView([r.lat, r.lng], 16);
+      if (r.name && form.village && !form.village.value.trim()) form.village.value = r.name;
+      toast(`ย้ายหมุดไปที่ ${r.name || r.label} แล้ว — ลากหมุดปรับให้ตรงได้`, 'success');
+    }));
 
     // Reverse-geocode the pin and select the matching จังหวัด/อำเภอ/ตำบล (adding a missing อำเภอ/ตำบล to the list)
     let areaReq = 0;
     const areaHint = (msg, cls = '') => { const h = $('#areaHint'); if (h) { h.className = `area-hint ${cls}`; h.innerHTML = `${icon('pin')} ${esc(msg)}`; } };
     const normName = v => stripArea(v).replace(/\s+/g, '');
     async function ensureGeo(kind, list, name, parentKey, parentId) {
-      const hit = list.find(x => normName(x.name_th) === normName(name));
+      const find = l => l.find(x => normName(x.name_th) === normName(name));
+      const hit = find(list);
       if (hit) return hit.id;
-      const r = await call(`/api/admin/${kind}`, { method: 'POST', body: { name_th: stripArea(name), [parentKey]: parentId } });
-      geoCache[kind].delete(parentId);
-      return r.id;
+      try {
+        const r = await api(`/api/admin/${kind}`, { method: 'POST', body: { name_th: stripArea(name), [parentKey]: parentId } });
+        geoCache[kind].delete(parentId);
+        return r.id;
+      } catch (e) {
+        // already there (added by someone else / an earlier try): read the list again and use it
+        geoCache[kind].delete(parentId);
+        await api('/api/admin/reload', { method: 'POST' }).catch(() => {});
+        const again = find(kind === 'districts' ? await districts(parentId, true) : await subdistricts(parentId, true));
+        if (again) return again.id;
+        throw e;
+      }
     }
     async function autoArea(lat, lng) {
       if (!areaUI) return;
@@ -909,7 +972,7 @@ ${field ? `
         await areaUI.loadDist();
         const txt = [g.subdistrict && `ต.${g.subdistrict}`, g.district && `อ.${g.district}`, `จ.${pv.name_th}`].filter(Boolean).join(' ');
         areaHint(`เติมจากหมุดแล้ว: ${txt} — แก้ไขได้ถ้าไม่ตรง`, 'ok');
-      } catch (e) { if (my === areaReq) areaHint('เติมพื้นที่อัตโนมัติไม่สำเร็จ — เลือกเองด้านบน', 'warn'); }
+      } catch (e) { if (my === areaReq) areaHint(`เติมพื้นที่อัตโนมัติไม่สำเร็จ (${e.message || 'ระบบไม่ตอบ'}) — เลือกเองด้านบน`, 'warn'); }
     }
 
     $('#btnGps').onclick = () => {
