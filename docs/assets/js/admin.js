@@ -1,7 +1,7 @@
 // RATTANA HELP — Admin dashboard
 (function () {
   'use strict';
-  const { api, esc, fmtNum, pieces, unitName, HELP_TYPES, helpType, stepsFor, statusLabel, fmtDate, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, icon, SearchSelect, Lightbox, makeMap, pinIcon, setPinSelected, toast, todayISO, CFG } = window.RH;
+  const { api, esc, fmtNum, pieces, perUnit, unitName, HELP_TYPES, helpType, stepsFor, statusLabel, fmtDate, areaText, STATUS, STAGES, STEPS, CATEGORIES, category, catChip, statusChip, icon, SearchSelect, Lightbox, makeMap, pinIcon, setPinSelected, toast, todayISO, CFG } = window.RH;
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   let main = $('#adm');
@@ -45,12 +45,47 @@
     <input class="input" list="${scope}-u${i}" data-k="unit" value="${esc(it.unit || '')}" placeholder="หน่วย" aria-label="หน่วย" autocomplete="off">
     <button type="button" class="btn btn-ghost-dark btn-icon" data-rm="${i}" aria-label="ลบรายการ">${icon('close')}</button>
     <datalist id="${scope}-u${i}">${COMMON_UNITS.map(u => `<option value="${esc(u)}">`).join('')}</datalist>
+    <div class="unit-chips" hidden></div>
     <small class="pcs-hint">${pcsHint(it)}</small></div>`;
+  /** Units of the product as tap-to-pick chips: "ชิ้น · แพ็ค 3 ชิ้น · ลัง 24 ชิ้น" (a typed-in unit field
+   *  only lists what matches its current text, so the other units of the product were hard to reach) */
+  function unitChips(row, units, current) {
+    const box = row.querySelector('.unit-chips');
+    if (!box) return;
+    box.hidden = !units || units.length < 2;
+    if (box.hidden) { box.innerHTML = ''; return; }
+    box.innerHTML = `<span class="uc-l">หน่วย</span>${units.map(u => {
+      const n = perUnit(u);
+      return `<button type="button" class="uchip${u === current ? ' on' : ''}" data-unit="${esc(u)}">${esc(unitName(u))}${n > 1 ? `<small>${fmtNum(n)} ชิ้น</small>` : ''}</button>`;
+    }).join('')}`;
+  }
   /** Wire product search, unit suggestions and the pieces hint on an items container */
   function itemAssist(box, scope, rows, onChange) {
     if (!box.parentElement.querySelector(`#${scope}-names`)) box.insertAdjacentHTML('beforebegin', `<datalist id="${scope}-names">${COMMON_ITEMS.map(n => `<option value="${esc(n)}">`).join('')}</datalist>`);
     const names = box.parentElement.querySelector(`#${scope}-names`);
-    loadProducts();
+    const setUnit = (row, it, u) => {
+      const unitIn = row.querySelector('[data-k="unit"]');
+      unitIn.value = u; it.unit = u;
+      row.querySelectorAll('.uchip').forEach(b => b.classList.toggle('on', b.dataset.unit === u));
+      row.querySelector('.pcs-hint').textContent = pcsHint(it);
+      onChange && onChange();
+    };
+    // rows already holding a known product get their unit chips (also after rows are redrawn)
+    const refresh = async () => {
+      const list = await loadProducts();
+      box.querySelectorAll('.item-row').forEach(row => {
+        const it = rows()[+row.dataset.i]; if (!it) return;
+        const p = findProduct(list, it.name);
+        if (p) { const units = p[1].split('|'); row.querySelector('datalist').innerHTML = units.map(u => `<option value="${esc(u)}">`).join(''); unitChips(row, units, it.unit); }
+      });
+    };
+    new MutationObserver(refresh).observe(box, { childList: true });
+    refresh();
+    box.addEventListener('click', e => {
+      const b = e.target.closest('.uchip'); if (!b) return;
+      const row = b.closest('[data-i]'), it = rows()[+row.dataset.i];
+      if (it) setUnit(row, it, b.dataset.unit);
+    });
     box.addEventListener('input', async e => {
       const row = e.target.closest('[data-i]'); if (!row) return;
       const it = rows()[+row.dataset.i]; if (!it) return;
@@ -67,9 +102,11 @@
           // keep a unit the team already chose if it matches this product, else pick its pack/case unit
           const cur = units.find(u => unitName(u) === unitName(unitIn.value));
           const pick = cur || units.find(u => !/^ชิ้น/.test(u)) || units[0];
+          unitChips(row, units, pick);
           if (pick && unitIn.value !== pick) { unitIn.value = pick; it.unit = pick; }
-        }
+        } else unitChips(row, null);
       }
+      if (k === 'unit') row.querySelectorAll('.uchip').forEach(b => b.classList.toggle('on', b.dataset.unit === e.target.value));
       row.querySelector('.pcs-hint').textContent = pcsHint(it);
       onChange && onChange();
     });

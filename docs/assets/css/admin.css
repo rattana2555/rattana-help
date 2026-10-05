@@ -358,3 +358,12 @@ body.ws-mode .adm-main { max-width: none; padding-bottom: 16px; }
 .ps-gmaps { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: var(--sky-50); color: var(--sky-600); font-weight: 700; font-size: 12.5px; }
 .ps-gmaps .ic { width: 14px; height: 14px; }
 .ps-gmaps:hover { background: var(--sky-100); }
+/* unit chips under an item row */
+.item-row .unit-chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -1px 0 1px 2px; }
+.item-row .unit-chips[hidden] { display: none; }
+.unit-chips .uc-l { font-size: 12px; color: var(--muted); margin-right: 2px; }
+.uchip { display: inline-flex; align-items: baseline; gap: 5px; padding: 5px 12px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--surface); color: var(--text); font-size: 13px; font-weight: 700; transition: all .2s; }
+.uchip small { font-size: 11px; font-weight: 600; color: var(--muted); }
+.uchip:hover { border-color: var(--sky-400); }
+.uchip.on { background: var(--indigo-grad); color: #fff; border-color: transparent; box-shadow: 0 6px 14px -6px rgba(41, 64, 168, .8); }
+.uchip.on small { color: var(--gold-2); }
