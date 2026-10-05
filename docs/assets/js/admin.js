@@ -416,6 +416,35 @@
       return { province, district, subdistrict: stripArea(sub || ''), name: r.name || a.amenity || a.building || a.neighbourhood || a.village || a.hamlet || '' };
     } catch { return null; }
   }
+  // ── All provinces / districts / subdistricts of Thailand (kongvut/thai-province-data, MIT) ──
+  // Used for the area pickers so every อำเภอ/ตำบล is there and in the right place, not only names added so far.
+  let thaiAreasP = null;
+  const areaKey = v => stripArea(v).replace(/\s+/g, '');
+  function thaiAreas() {
+    return (thaiAreasP ||= fetch('assets/geo/th-areas.json').then(r => (r.ok ? r.json() : null)).catch(() => null).then(j => {
+      const P = new Map(), D = new Map(), S = new Map();
+      if (j) {
+        j.p.forEach(([pid, n]) => P.set(areaKey(n), pid));
+        j.d.forEach(([did, pid, n]) => { if (!D.has(pid)) D.set(pid, []); D.get(pid).push({ id: did, name: n }); });
+        j.s.forEach(([did, n, zip, lat, lng]) => { if (!S.has(did)) S.set(did, []); S.get(did).push({ name: n, zip, lat, lng }); });
+        D.forEach(l => l.sort((a, b) => a.name.localeCompare(b.name, 'th')));
+        S.forEach(l => l.sort((a, b) => a.name.localeCompare(b.name, 'th')));
+      }
+      const districts = prov => D.get(P.get(areaKey(prov))) || [];
+      const districtOf = (prov, dist) => (districts(prov).find(d => areaKey(d.name) === areaKey(dist)) || {}).id;
+      return {
+        ok: !!j, districts, districtOf,
+        subs: did => (did && S.get(did)) || [],
+        /** canonical names for what the map's reverse geocoder returned (or the raw names if not found) */
+        match(prov, dist, sub) {
+          const d = districts(prov).find(x => areaKey(x.name) === areaKey(dist));
+          const s = d && (S.get(d.id) || []).find(x => areaKey(x.name) === areaKey(sub));
+          return { district: d ? d.name : stripArea(dist || ''), subdistrict: s ? s.name : stripArea(sub || '') };
+        },
+      };
+    }));
+  }
+
   // ── Place search over the map (OpenStreetMap / Nominatim — free, no key) ──
   // Type a place and press ค้นหา (or Enter) → pick a result → the pin moves there. A Google Maps link or
   // "lat, lng" pasted into the box jumps straight to those coordinates. Searches run on demand only (no
@@ -433,8 +462,14 @@
     el.innerHTML = `<div class="ps-box"><span class="ps-ic">${icon('search')}</span>
         <input class="input" type="search" placeholder="ค้นหาสถานที่ เช่น วัดไทร บางคนที · หรือวางลิงก์ Google Maps / พิกัด" aria-label="ค้นหาสถานที่" autocomplete="off" enterkeyhint="search">
         <button type="button" class="btn btn-navy btn-sm">ค้นหา</button></div>
+      <div class="ps-tip"><button type="button" class="ps-gmaps">${icon('external')} ค้นใน Google Maps</button><span>หาเจอแล้วกด “แชร์” → คัดลอกลิงก์ มาวางในช่องด้านบน</span></div>
       <ul class="ps-list" hidden></ul>`;
-    const input = el.querySelector('input'), btn = el.querySelector('button'), list = el.querySelector('.ps-list');
+    const input = el.querySelector('input'), btn = el.querySelector('.ps-box button'), list = el.querySelector('.ps-list');
+    // Google's own search is the best at finding places by name: open it, then paste the shared link back here
+    el.querySelector('.ps-gmaps').onclick = () => {
+      const q = input.value.trim();
+      window.open(q && !/^https?:/i.test(q) ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}` : 'https://www.google.com/maps', '_blank', 'noopener');
+    };
     let results = [], seq = 0;
     const msg = t => { list.hidden = false; list.innerHTML = `<li class="ps-msg">${esc(t)}</li>`; };
     const pick = r => { list.hidden = true; onPick(r); };
@@ -443,7 +478,21 @@
       if (!q) return input.focus();
       const c = coordsFrom(q);
       if (c) return pick({ ...c, name: '', label: `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}` });
-      if (/maps\.app\.goo\.gl|goo\.gl\/maps/i.test(q)) return msg('ลิงก์แบบย่อของ Google Maps เปิดจากที่นี่ไม่ได้ — เปิดลิงก์ใน Google Maps แล้วกดค้างที่หมุดเพื่อคัดลอกพิกัด มาวางที่ช่องนี้');
+      if (/^https?:\/\/\S*(goo\.gl|google\.[a-z.]+\/maps|maps\.google\.)/i.test(q)) {
+        // a Google Maps share link: the backend follows it to the full URL, which has the coordinates
+        const my = ++seq;
+        msg('กำลังเปิดลิงก์ Google Maps…');
+        try {
+          const r = await api('/api/admin/map-link', { method: 'POST', body: { url: q } });
+          if (my !== seq) return;
+          const c2 = coordsFrom(r.url);
+          const name = decodeURIComponent((/\/place\/([^/@?]+)/.exec(r.url) || [])[1] || '').replace(/\+/g, ' ');
+          if (c2) return pick({ ...c2, name, label: name || `${c2.lat.toFixed(6)}, ${c2.lng.toFixed(6)}` });
+          if (name) { input.value = name; return go(); }
+        } catch { /* older backend or no network */ }
+        if (my === seq) msg('เปิดลิงก์นี้ไม่ได้ — ใน Google Maps ให้กดค้างที่หมุดเพื่อคัดลอกพิกัด แล้ววางที่ช่องนี้');
+        return;
+      }
       const my = ++seq;
       msg('กำลังค้นหา…');
       try {
@@ -864,48 +913,47 @@ ${field ? `
     // Status
     $('#segStatus').onclick = e => { const t = e.target.closest('[data-v]'); if (!t) return; st.status = t.dataset.v; $$('#segStatus button').forEach(b => b.classList.toggle('on', b === t)); marker && marker.setIcon(pinIcon(st.status, true)); };
 
-    // Area cascade with inline "add new"
-    const addGeo = (kind, parentKey, parentId, label) => async q => {
-      if (parentKey && !parentId) { toast('กรุณาเลือกรายการก่อนหน้าก่อน', 'warning'); return null; }
-      const name = q || await promptName(`เพิ่ม${label}`, `ชื่อ${label}`);
-      if (!name) return null;
-      try {
-        const r = await call(`/api/admin/${kind}`, { method: 'POST', body: { name_th: name, ...(parentKey ? { [parentKey]: parentId } : {}) } });
-        toast(`เพิ่ม${label} “${name}” แล้ว`, 'success');
-        if (kind === 'provinces') geoCache.provinces = null;
-        if (kind === 'districts') geoCache.districts.delete(parentId);
-        if (kind === 'subdistricts') geoCache.subdistricts.delete(parentId);
-        return { value: r.id, label: name };
-      } catch (e) { fail(e); return null; }
-    };
+    // Area: จังหวัด from the sheet; อำเภอ / ตำบล from the complete list of Thailand (assets/geo/th-areas.json),
+    // kept by name — on save Apps Script turns the names into its own ids (adding a row the first time a name is used)
+    const geo = await thaiAreas();
+    if (id !== renderId) return;
+    st.district_name = L0.district || '';
+    st.subdistrict_name = L0.subdistrict || '';
+    const provName = () => (provs.find(p => p.id === st.province_id) || {}).name_th || '';
     const ssProv = new SearchSelect($('#ssProv'), {
       value: st.province_id, placeholder: '— เลือกจังหวัด —', searchPlaceholder: 'ค้นหาจังหวัด...',
       options: provs.map(p => ({ value: p.id, label: p.name_th, sub: p.region })),
-      onAdd: addGeo('provinces', null, null, 'จังหวัด'), addLabel: 'เพิ่มจังหวัดใหม่',
-      onChange: async v => { st.province_id = Number(v) || null; st.district_id = st.subdistrict_id = null; await loadDist(); },
+      onChange: v => { st.province_id = Number(v) || null; st.district_name = st.subdistrict_name = ''; loadDist(); },
     });
+    const custom = label => async q => { const name = q || await promptName(`ระบุ${label}`, `ชื่อ${label}`); return name ? { value: stripArea(name), label: stripArea(name) } : null; };
     const ssDist = new SearchSelect($('#ssDist'), {
-      placeholder: '— เลือกอำเภอ —', searchPlaceholder: 'ค้นหาอำเภอ...', addLabel: 'เพิ่มอำเภอใหม่',
-      onAdd: q => addGeo('districts', 'province_id', st.province_id, 'อำเภอ')(q),
-      onChange: async v => { st.district_id = Number(v) || null; st.subdistrict_id = null; await loadSub(); },
+      placeholder: '— เลือกอำเภอ —', searchPlaceholder: 'ค้นหาอำเภอ...', addLabel: 'ใช้ชื่ออำเภอที่พิมพ์',
+      onAdd: custom('อำเภอ'),
+      onChange: v => { st.district_name = v || ''; st.subdistrict_name = ''; loadSub(); },
     });
     const ssSub = new SearchSelect($('#ssSub'), {
-      placeholder: '— เลือกตำบล —', searchPlaceholder: 'ค้นหาตำบล...', addLabel: 'เพิ่มตำบลใหม่',
-      onAdd: q => addGeo('subdistricts', 'district_id', st.district_id, 'ตำบล')(q),
-      onChange: v => { st.subdistrict_id = Number(v) || null; },
+      placeholder: '— เลือกตำบล —', searchPlaceholder: 'ค้นหาตำบล...', addLabel: 'ใช้ชื่อตำบลที่พิมพ์',
+      onAdd: custom('ตำบล'),
+      onChange: v => {
+        st.subdistrict_name = v || '';
+        // no pin yet → show that ตำบล on the map so the exact spot is easy to tap
+        const s = geo.subs(geo.districtOf(provName(), st.district_name)).find(x => x.name === st.subdistrict_name);
+        if (s && s.lat != null && !marker) pm.setView([s.lat, s.lng], 14);
+      },
     });
     onCleanup(() => [ssProject, ssProv, ssDist, ssSub].forEach(s => s.destroy()));
-    async function loadDist() {
-      const list = await districts(st.province_id);
-      ssDist.setOptions(list.map(d => ({ value: d.id, label: d.name_th })), false); ssDist.setValue(st.district_id); ssDist.setDisabled(!st.province_id);
-      await loadSub();
+    const withCurrent = (opts, cur) => (cur && !opts.some(o => o.value === cur) ? [{ value: cur, label: cur, sub: 'ชื่อที่บันทึกไว้เดิม' }, ...opts] : opts);
+    function loadDist() {
+      const opts = geo.districts(provName()).map(d => ({ value: d.name, label: d.name }));
+      ssDist.setOptions(withCurrent(opts, st.district_name), false); ssDist.setValue(st.district_name); ssDist.setDisabled(!st.province_id);
+      loadSub();
     }
-    async function loadSub() {
-      const list = await subdistricts(st.district_id);
-      ssSub.setOptions(list.map(d => ({ value: d.id, label: d.name_th })), false); ssSub.setValue(st.subdistrict_id); ssSub.setDisabled(!st.district_id);
+    function loadSub() {
+      const opts = geo.subs(geo.districtOf(provName(), st.district_name)).map(s => ({ value: s.name, label: s.name, sub: s.zip ? `รหัสไปรษณีย์ ${s.zip}` : '' }));
+      ssSub.setOptions(withCurrent(opts, st.subdistrict_name), false); ssSub.setValue(st.subdistrict_name); ssSub.setDisabled(!st.district_name);
     }
-    await loadDist();
-    areaUI = { ssProv, loadDist };
+    loadDist();
+    areaUI = { ssProv, loadDist, geo, provName };
     }
 
     // Map picker
@@ -937,23 +985,6 @@ ${field ? `
     let areaReq = 0;
     const areaHint = (msg, cls = '') => { const h = $('#areaHint'); if (h) { h.className = `area-hint ${cls}`; h.innerHTML = `${icon('pin')} ${esc(msg)}`; } };
     const normName = v => stripArea(v).replace(/\s+/g, '');
-    async function ensureGeo(kind, list, name, parentKey, parentId) {
-      const find = l => l.find(x => normName(x.name_th) === normName(name));
-      const hit = find(list);
-      if (hit) return hit.id;
-      try {
-        const r = await api(`/api/admin/${kind}`, { method: 'POST', body: { name_th: stripArea(name), [parentKey]: parentId } });
-        geoCache[kind].delete(parentId);
-        return r.id;
-      } catch (e) {
-        // already there (added by someone else / an earlier try): read the list again and use it
-        geoCache[kind].delete(parentId);
-        await api('/api/admin/reload', { method: 'POST' }).catch(() => {});
-        const again = find(kind === 'districts' ? await districts(parentId, true) : await subdistricts(parentId, true));
-        if (again) return again.id;
-        throw e;
-      }
-    }
     async function autoArea(lat, lng) {
       if (!areaUI) return;
       const my = ++areaReq;
@@ -963,16 +994,12 @@ ${field ? `
       if (!g || !g.province) return areaHint('หาชื่อพื้นที่จากหมุดไม่ได้ — เลือกเองด้านบน', 'warn');
       const pv = provs.find(p => normName(p.name_th) === normName(g.province));
       if (!pv) return areaHint(`ไม่พบจังหวัด “${g.province}” ในระบบ — เลือกเองด้านบน`, 'warn');
-      try {
-        const dId = g.district ? await ensureGeo('districts', await districts(pv.id), g.district, 'province_id', pv.id) : null;
-        const sId = dId && g.subdistrict ? await ensureGeo('subdistricts', await subdistricts(dId), g.subdistrict, 'district_id', dId) : null;
-        if (my !== areaReq) return;
-        st.province_id = pv.id; st.district_id = dId; st.subdistrict_id = sId;
-        areaUI.ssProv.setValue(pv.id);
-        await areaUI.loadDist();
-        const txt = [g.subdistrict && `ต.${g.subdistrict}`, g.district && `อ.${g.district}`, `จ.${pv.name_th}`].filter(Boolean).join(' ');
-        areaHint(`เติมจากหมุดแล้ว: ${txt} — แก้ไขได้ถ้าไม่ตรง`, 'ok');
-      } catch (e) { if (my === areaReq) areaHint(`เติมพื้นที่อัตโนมัติไม่สำเร็จ (${e.message || 'ระบบไม่ตอบ'}) — เลือกเองด้านบน`, 'warn'); }
+      const m = areaUI.geo.match(pv.name_th, g.district, g.subdistrict);
+      st.province_id = pv.id; st.district_name = m.district; st.subdistrict_name = m.subdistrict;
+      areaUI.ssProv.setValue(pv.id);
+      areaUI.loadDist();
+      const txt = [m.subdistrict && `ต.${m.subdistrict}`, m.district && `อ.${m.district}`, `จ.${pv.name_th}`].filter(Boolean).join(' ');
+      areaHint(`เติมจากหมุดแล้ว: ${txt} — แก้ไขได้ถ้าไม่ตรง`, 'ok');
     }
 
     $('#btnGps').onclick = () => {
@@ -981,9 +1008,11 @@ ${field ? `
     };
     if (!field) $('#btnGeocode').onclick = async () => {
       const prov = provs.find(p => p.id === st.province_id)?.name_th;
-      const dist = (await districts(st.province_id)).find(d => d.id === st.district_id)?.name_th;
-      const sub = (await subdistricts(st.district_id)).find(d => d.id === st.subdistrict_id)?.name_th;
+      const dist = st.district_name, sub = st.subdistrict_name;
       if (!prov) return toast('กรุณาเลือกจังหวัดก่อน', 'warning');
+      // the full list knows where most ตำบล are: use it before asking the map service
+      const known = sub && areaUI && areaUI.geo.subs(areaUI.geo.districtOf(prov, dist)).find(x => x.name === sub);
+      if (known && known.lat != null) { setPoint(known.lat, known.lng, true); toast(`ไปที่ ต.${sub} แล้ว — ปรับหมุดให้ตรงจุดจริง`, 'info'); return; }
       const tries = [[sub && `ตำบล${sub}`, dist && `อำเภอ${dist}`, `จังหวัด${prov}`], [dist && `อำเภอ${dist}`, `จังหวัด${prov}`], [`จังหวัด${prov}`]].map(a => a.filter(Boolean).join(' '));
       setLoading(true);
       try {
@@ -1089,7 +1118,7 @@ ${field ? `
       const body = {
         project_id: st.project_id, code: form.code.value, name: form.name.value, delivery_date: form.delivery_date.value, status: st.status,
         beneficiaries: form.beneficiaries.value, households: form.households.value, supporters: form.supporters.value, description: form.description.value,
-        province_id: st.province_id, district_id: st.district_id, subdistrict_id: st.subdistrict_id, village: form.village.value,
+        province_id: st.province_id, district_id: null, subdistrict_id: null, area_names: { district: st.district_name || '', subdistrict: st.subdistrict_name || '' }, village: form.village.value,
         lat: form.lat.value, lng: form.lng.value,
         items: st.items.filter(i => String(i.name || '').trim()).map(i => ({ name: i.name, quantity: i.quantity, unit: i.unit })),
         updates: Object.values(st.updates),

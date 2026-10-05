@@ -384,6 +384,8 @@
   on('GET', '/api/donations', async () => gasGet('donations', 2, true));
   on('GET', '/api/admin/donation-sheet', async () => gasPost('donationSheet'));
   on('PUT', '/api/admin/donation-sheet', async (_, __, b) => gasPost('donationSheet', { url: b.url || '' }));
+  // Google Maps share link → full URL with coordinates (followed by Apps Script)
+  on('POST', '/api/admin/map-link', async (_, __, b) => gasPost('mapLink', { url: b.url || '' }));
 
   RH.api = async function (path, { method = 'GET', body } = {}) {
     const [p, qs = ''] = String(path).split('?');

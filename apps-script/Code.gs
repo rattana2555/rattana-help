@@ -24,7 +24,7 @@ var ROLES = ['super', 'field'];
 var CATEGORY_KEYS = ['flood', 'drought', 'fire', 'storm', 'cold', 'community', 'education', 'health', 'other'];
 /** items = handing over goods · service = a service/activity (free parking, kitchen, shelter, medical unit…) */
 var HELP_TYPES = ['items', 'service'];
-var API_VERSION = 5;
+var API_VERSION = 6;
 
 var TABLES = {
   // New columns are only ever appended at the end (ensureSchema_ adds them to existing sheets)
@@ -184,7 +184,8 @@ var ACTIONS = {
   adminUpdate: { write: true, fn: adminUpdate_ },
   adminDelete: { write: true, fn: adminDelete_ },
   changePassword: { field: true, fn: changePassword_ },
-  donationSheet: { fn: donationSheet_ }
+  donationSheet: { fn: donationSheet_ },
+  mapLink: { field: true, fn: mapLink_ }
 };
 
 function out_(obj) { return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON); }
@@ -769,6 +770,29 @@ function buildDonations_(rows) {
     pending: { count: pend.length, amount: sum(pend) }
   };
 }
+// ───────────────────────── Google Maps share links ─────────────────────────
+// A shared link (maps.app.goo.gl/…) is a short redirect the browser may not follow (CORS). Follow it here —
+// only within Google's own hosts — and return the full Google Maps URL, which carries the coordinates.
+var GMAPS_HOST = /^https:\/\/(maps\.app\.goo\.gl|goo\.gl|g\.co|(www\.|maps\.)?google\.(com|com\.[a-z]{2}|co\.[a-z]{2}|[a-z]{2}))(\/|$)/i;
+function mapLink_(b) {
+  var url = String(b.url || '').trim();
+  if (!GMAPS_HOST.test(url)) throw err_(400, 'รองรับเฉพาะลิงก์ Google Maps');
+  for (var i = 0; i < 6; i++) {
+    var res = UrlFetchApp.fetch(url, { followRedirects: false, muteHttpExceptions: true, headers: { 'Accept-Language': 'th,en' } });
+    var code = res.getResponseCode();
+    if (code < 300 || code >= 400) break;
+    var h = res.getAllHeaders(), loc = h.Location || h.location;
+    if (!loc) break;
+    if (loc.charAt(0) === '/') loc = url.replace(/^(https:\/\/[^\/]+).*$/, '$1') + loc;
+    // consent / sign-in pages keep the real target in ?continue=
+    var cont = /[?&]continue=([^&]+)/.exec(loc);
+    if (cont && !/\/maps/.test(loc)) loc = decodeURIComponent(cont[1]);
+    if (!GMAPS_HOST.test(loc)) break;
+    url = loc;
+  }
+  return { url: url };
+}
+
 // Admin (main admin only): set or check the donation sheet
 function donationSheet_(b) {
   var props = PropertiesService.getScriptProperties();
