@@ -271,11 +271,13 @@
   $('#tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) location.hash = b.dataset.tab; });
 
   // ─────────────── router ───────────────
+  let backTo = 'locations'; // where a point editor returns after saving
   async function route() {
     if (!me) return;
     const h = location.hash.replace(/^#/, '').split('?')[0] || 'overview';
     const parts = h.split('/');
     const tabName = parts[0];
+    if ((tabName === 'locations' && !parts[1]) || (tabName === 'projects' && parts[1])) backTo = h;
     if (!isSuper() && (['projects', 'areas'].includes(tabName) || (tabName === 'locations' && parts[1] === 'new'))) { location.hash = 'overview'; return; }
     const id = ++renderId;
     cleanups.forEach(fn => { try { fn(); } catch { /* ignore */ } }); cleanups = [];
@@ -1133,6 +1135,7 @@ ${field ? `
       renderPhotos(); renderTimeline();
     }
     renderPhotos();
+    try { if (sessionStorage.getItem('rh_scroll_photos')) { sessionStorage.removeItem('rh_scroll_photos'); setTimeout(() => $('#photoSec')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300); } } catch { /* storage blocked */ }
 
     // Delete
     $('#btnDelLoc')?.addEventListener('click', async () => {
@@ -1146,10 +1149,12 @@ ${field ? `
       if (field) {
         const btn = $('#btnSave'); btn.disabled = true;
         try {
+          btn.innerHTML = `${icon('check')} กำลังบันทึก…`;
           await call(`/api/admin/locations/${lid}/field`, { method: 'PATCH', body: { status: st.status, lat: form.lat.value, lng: form.lng.value, updates: Object.values(st.updates) } });
           toast('บันทึกการอัปเดตแล้ว ✓', 'success');
+          location.hash = backTo;
         } catch (err) { fail(err); }
-        finally { btn.disabled = false; }
+        finally { btn.disabled = false; btn.innerHTML = `${icon('check')} บันทึกการอัปเดต`; }
         return;
       }
       const body = {
@@ -1163,13 +1168,16 @@ ${field ? `
       if (!body.project_id) return toast('กรุณาเลือกโครงการ', 'warning');
       if (!body.code.trim() || !body.name.trim()) return toast('กรุณาระบุรหัสจุดและชื่อจุด', 'warning');
       if (body.lat === '' || body.lng === '') toast('ยังไม่ได้กำหนดพิกัด — จุดนี้จะไม่แสดงบนแผนที่', 'warning');
-      const btn = $('#btnSave'); btn.disabled = true;
+      const btn = $('#btnSave'), label = btn.innerHTML; btn.disabled = true; btn.innerHTML = `${icon('check')} กำลังบันทึก…`;
       try {
         const r = lid ? await call(`/api/admin/locations/${lid}`, { method: 'PUT', body }) : await call('/api/admin/locations', { method: 'POST', body });
-        toast('บันทึกเรียบร้อย ✓', 'success');
-        if (!lid) location.hash = `locations/edit/${r.id}`;
+        if (lid) { toast('บันทึกเรียบร้อย ✓', 'success'); location.hash = backTo; return; }
+        // new point: open it to add photos (the upload box is right there)
+        toast('บันทึกจุดแล้ว — เพิ่มภาพด้านล่างได้เลย', 'success');
+        sessionStorage.setItem('rh_scroll_photos', '1');
+        location.hash = `locations/edit/${r.id}`;
       } catch (err) { fail(err); }
-      finally { btn.disabled = false; }
+      finally { btn.disabled = false; btn.innerHTML = label; }
     });
   }
 
