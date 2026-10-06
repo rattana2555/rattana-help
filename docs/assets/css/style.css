@@ -421,7 +421,8 @@ input, select, textarea { font: inherit; font-size: 16px; color: inherit; }
 body.is-map { padding-bottom: 0; }
 body.is-map .site-footer { display: none; }
 .mapview { position: relative; height: calc(100dvh - var(--topbar-h) - env(safe-area-inset-top)); }
-@media (min-width: 900px) { .mapview { display: grid; grid-template-columns: 410px 1fr; gap: 0; } }
+/* the row is held to the map's height (an auto row would grow with a long point card, so the panel never scrolled) */
+@media (min-width: 900px) { .mapview { display: grid; grid-template-columns: 410px 1fr; grid-template-rows: minmax(0, 1fr); gap: 0; } }
 .mapview .map { position: absolute; inset: 0; z-index: 0; }
 @media (max-width: 899px) { .mapview .leaflet-control-zoom { display: none; } }
 @media (min-width: 900px) { .mapview .map { position: relative; inset: auto; height: 100%; grid-column: 2; grid-row: 1; } }
@@ -453,7 +454,7 @@ body.is-map .site-footer { display: none; }
 .sheet-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 16px; }
 @media (max-width: 899px) { .sheet:not(.is-open) .sheet-body { visibility: hidden; } }
 @media (min-width: 900px) {
-  .sheet { position: relative; left: auto; right: auto; bottom: auto; grid-column: 1; grid-row: 1; height: auto !important; border-radius: 0; border: 0; border-right: 1px solid var(--line-2); box-shadow: 8px 0 30px -18px rgba(19, 32, 99, .3); background: rgba(255, 255, 255, .7); }
+  .sheet { position: relative; left: auto; right: auto; bottom: auto; grid-column: 1; grid-row: 1; height: auto !important; min-height: 0; border-radius: 0; border: 0; border-right: 1px solid var(--line-2); box-shadow: 8px 0 30px -18px rgba(19, 32, 99, .3); background: rgba(255, 255, 255, .7); }
   .sheet-handle::before { display: none; }
   .sheet-handle { padding: 20px 22px 8px; cursor: default; }
   .sheet-sum .toggle { display: none; }
