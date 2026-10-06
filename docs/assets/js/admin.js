@@ -272,7 +272,7 @@
 
   // ─────────────── router ───────────────
   let backTo = 'locations'; // where a point editor returns after saving
-  async function route() {
+  async function route(quiet = false) {
     if (!me) return;
     const h = location.hash.replace(/^#/, '').split('?')[0] || 'overview';
     const parts = h.split('/');
@@ -283,8 +283,11 @@
     cleanups.forEach(fn => { try { fn(); } catch { /* ignore */ } }); cleanups = [];
     document.body.classList.remove('editing');
     $$('.adm-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
-    const fresh = main.cloneNode(false); main.replaceWith(fresh); main = fresh;
-    main.innerHTML = `<div class="loading" style="min-height:40vh;flex-direction:column;gap:12px"><div class="spinner"></div>${window.RH.backend === 'apps-script' ? '<p style="color:var(--muted);font-size:13.5px">กำลังโหลดข้อมูลจาก Google…</p>' : ''}</div>`;
+    const fresh = main.cloneNode(false), keepY = window.scrollY;
+    // quiet = redraw with newer data: no spinner, hold the page height so the scroll position stays
+    if (quiet) fresh.style.minHeight = `${main.offsetHeight}px`;
+    main.replaceWith(fresh); main = fresh;
+    if (!quiet) main.innerHTML = `<div class="loading" style="min-height:40vh;flex-direction:column;gap:12px"><div class="spinner"></div>${window.RH.backend === 'apps-script' ? '<p style="color:var(--muted);font-size:13.5px">กำลังโหลดข้อมูลจาก Google…</p>' : ''}</div>`;
     const pages = { overview: pageOverview, projects: parts[1] ? pageProjectWorkspace : pageProjects, locations: parts[1] ? pageLocationEditor : pageLocations, photos: pagePhotos, areas: pageAreas, admins: pageAdmins };
     try { await (pages[tabName] || pageOverview)(id, parts); }
     catch (e) {
@@ -293,8 +296,33 @@
         $('#retryLoad').onclick = () => route();
       }
     }
+    if (quiet && id === renderId) { window.scrollTo(0, keepY); main.style.minHeight = ''; }
+    syncState();
   }
-  window.addEventListener('hashchange', route);
+  window.addEventListener('hashchange', () => route());
+
+  // The admin opens from the copy of the data saved on this device (Google can take a minute to answer);
+  // the 🔄 button spins while the fresh copy loads, and the page redraws itself when it brings changes.
+  // Editors and open dialogs are never redrawn under the user's hands.
+  async function syncState() {
+    if (window.RH.backend !== 'apps-script') return;
+    const a = await api('/api/admin/data-age').catch(() => null);
+    const b = $('#btnRefresh');
+    b.classList.toggle('syncing', !!(a && a.loading));
+    b.title = a && a.loading ? 'กำลังอัปเดตข้อมูลล่าสุดจาก Google…' : 'รีเฟรชข้อมูล';
+  }
+  const LIVE_TABS = ['overview', 'projects', 'locations', 'photos'];
+  window.addEventListener('rh:admin-data', e => {
+    syncState();
+    const d = e.detail || {};
+    if (d.failed) return toast('ยังโหลดข้อมูลล่าสุดจาก Google ไม่สำเร็จ — ข้อมูลที่เห็นอาจไม่ใช่ล่าสุด กด 🔄 เพื่อลองใหม่', 'warning');
+    if (!d.changed || !me) return;
+    const parts = (location.hash.replace(/^#/, '').split('?')[0] || 'overview').split('/');
+    const isList = LIVE_TABS.includes(parts[0]) && !parts[1];
+    if (isList && !overlay.classList.contains('open') && !document.body.classList.contains('editing')) route(true);
+    else toast('มีข้อมูลใหม่จาก Google — กด 🔄 เพื่อโหลดหน้านี้ใหม่', 'info');
+  });
+  window.addEventListener('rh:admin-401', () => { if (me) { me = null; showLogin('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่'); } });
 
   // ─────────────── OVERVIEW ───────────────
   async function pageOverview(id) {

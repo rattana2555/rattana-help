@@ -9,18 +9,21 @@
   const RH = window.RH;
 
   class HttpErr extends Error { constructor(status, msg) { super(msg); this.status = status; } }
-  const TOKEN_KEY = 'rh_token', PUB_KEY = 'rh_public_v1';
+  const TOKEN_KEY = 'rh_token', PUB_KEY = 'rh_public_v1', ADM_KEY = 'rh_admin_data_v1';
   const store = {
     get: k => { try { return localStorage.getItem(k); } catch { return null; } },
     set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* storage blocked */ } },
   };
   const token = () => store.get(TOKEN_KEY) || '';
+  // the saved admin copy belongs to one sign-in: a short fingerprint of the token (never the token itself)
+  const tokenTag = () => { const t = token(); let h = 7; for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0; return t ? h.toString(36) : ''; };
+  function signedOut() { store.set(TOKEN_KEY, null); store.set(ADM_KEY, null); }
 
   // ── transport (text/plain POST = no CORS preflight, which Apps Script can't answer) ──
   async function unwrap(res) {
     let j;
     try { j = await res.json(); } catch { throw new HttpErr(502, 'เชื่อมต่อระบบข้อมูลไม่สำเร็จ'); }
-    if (!j.ok) { if (j.status === 401) store.set(TOKEN_KEY, null); throw new HttpErr(j.status || 500, j.error || 'เกิดข้อผิดพลาด'); }
+    if (!j.ok) { if (j.status === 401) signedOut(); throw new HttpErr(j.status || 500, j.error || 'เกิดข้อผิดพลาด'); }
     return j.data;
   }
   // Reads retry: Apps Script now and then answers with a temporary HTML error page instead of JSON
@@ -60,13 +63,13 @@
         const res = await fetch(CFG.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body, signal: ctl && ctl.signal });
         try { j = await res.json(); } catch { /* error page */ }
       } catch { /* network error / timeout */ } finally { clearTimeout(timer); }
-      if (j && j.ok === false) { if (j.status === 401) store.set(TOKEN_KEY, null); throw new HttpErr(j.status || 500, j.error || 'เกิดข้อผิดพลาด'); }
+      if (j && j.ok === false) { if (j.status === 401) signedOut(); throw new HttpErr(j.status || 500, j.error || 'เกิดข้อผิดพลาด'); }
       if (j && j.ok && ok(j.data)) return j.data;
       const notRun = !!(j && j.ok && j.data && Array.isArray(j.data.projects) && !('me' in j.data) && !('result' in j.data));
       if (!notRun) maybeRan = true;
       const safe = notRun || !write || idempotent();
       if (i < tries && safe) { await sleep(900 * i); continue; }
-      if (write && maybeRan) { adm = null; admRaw = null; throw new HttpErr(503, 'ระบบ Google ตอบช้าหรือขัดข้องชั่วคราว ไม่แน่ใจว่าบันทึกสำเร็จหรือไม่ — กดรีเฟรชแล้วตรวจสอบอีกครั้ง'); }
+      if (write && maybeRan) { adm = null; admRaw = null; store.set(ADM_KEY, null); throw new HttpErr(503, 'ระบบ Google ตอบช้าหรือขัดข้องชั่วคราว ไม่แน่ใจว่าบันทึกสำเร็จหรือไม่ — กดรีเฟรชแล้วตรวจสอบอีกครั้ง'); }
       throw new HttpErr(503, 'ระบบ Google ตอบช้าหรือขัดข้องชั่วคราว กรุณาลองอีกครั้ง');
     }
   }
@@ -105,18 +108,54 @@
     return Promise.any([snap, live]).catch(() => live); // whichever arrives first; live error surfaces if both fail
   }
 
-  let admLoading = null;
+  // ── admin dataset ──
+  // Apps Script often takes 5–60 s to answer. The admin opens at once from the copy saved after the last answer
+  // on this device, while a fresh copy loads in the background; pages redraw when it arrives ('rh:admin-data').
+  let admLoading = null, admBoot = true;
+  const ADM_MAX = 3 * 86400000; // an older copy is not shown: wait for Google instead
+  function fetchAdm(background) {
+    if (!admLoading) {
+      admLoading = gasPost('adminData').then(d => {
+        // a write may have answered while this read was on its way: keep whichever is newer
+        if (adm && (adm.rev || 0) > (d.rev || 0)) return adm;
+        const before = background && admRaw ? sameKey(admRaw) : null;
+        setAdm(d);
+        if (background) window.dispatchEvent(new CustomEvent('rh:admin-data', { detail: { changed: before !== sameKey(admRaw) } }));
+        return adm;
+      }).catch(e => {
+        if (background) window.dispatchEvent(e.status === 401 ? new CustomEvent('rh:admin-401') : new CustomEvent('rh:admin-data', { detail: { failed: true } }));
+        if (background && e.status === 401) { adm = null; admRaw = null; }
+        throw e;
+      }).finally(() => { admLoading = null; });
+    }
+    return admLoading;
+  }
+  const sameKey = raw => { const { rev, ...rest } = raw; return JSON.stringify(rest); };
   async function adminData() {
     if (adm) return adm;
     if (!token()) throw new HttpErr(401, 'กรุณาเข้าสู่ระบบ');
-    // several admin views ask at once on first load: share one request
-    if (!admLoading) admLoading = gasPost('adminData').then(d => { setAdm(d); return adm; }).finally(() => { admLoading = null; });
-    return admLoading;
+    if (admBoot) {
+      admBoot = false;
+      try {
+        const c = JSON.parse(store.get(ADM_KEY) || 'null');
+        if (c && c.k === tokenTag() && Date.now() - c.t < ADM_MAX && c.d && Array.isArray(c.d.projects)) {
+          admRaw = c.d; adm = build(clone0(c.d), true); admSavedAt = c.t;
+          fetchAdm(true).catch(() => {});
+          return adm;
+        }
+      } catch { /* ignore a broken copy */ }
+    }
+    return fetchAdm(false); // several admin views ask at once on first load: they share one request
   }
   // admRaw = the dataset as Google sent it (build() decorates its input), kept so slim answers can be patched in
-  let admRaw = null;
+  let admRaw = null, admSavedAt = 0;
   const clone0 = o => JSON.parse(JSON.stringify(o));
-  function setAdm(raw) { admRaw = clone0(raw); adm = build(raw, true); }
+  function saveAdm() {
+    admSavedAt = Date.now();
+    try { localStorage.setItem(ADM_KEY, JSON.stringify({ k: tokenTag(), t: admSavedAt, d: admRaw })); }
+    catch { store.set(ADM_KEY, null); } // full or blocked: just don't keep a copy
+  }
+  function setAdm(raw) { admRaw = clone0(raw); adm = build(raw, true); saveAdm(); }
   async function write(action, payload) {
     const r = await gasPost(action, payload, { write: true });
     if (r.slim) {
@@ -127,6 +166,7 @@
         }
         admRaw.rev = Math.max(admRaw.rev || 0, r.rev || 0);
         adm = build(clone0(admRaw), true);
+        saveAdm();
       } else adm = null; // nothing cached yet: the next read fetches everything
     } else if (!adm || !(adm.rev > (r.data.rev || 0))) setAdm(r.data); // parallel writes can answer out of order: keep the newest
     pub = null; pubKey = ''; store.set(PUB_KEY, null);
@@ -338,10 +378,12 @@
     setAdm(r.data);
     return r.me;
   });
-  on('POST', '/api/admin/logout', async () => { await gasPost('logout').catch(() => {}); store.set(TOKEN_KEY, null); adm = null; admRaw = null; return { ok: true }; });
+  on('POST', '/api/admin/logout', async () => { await gasPost('logout').catch(() => {}); signedOut(); adm = null; admRaw = null; return { ok: true }; });
   on('GET', '/api/admin/me', async () => (await adminData()).me);
   // the admin 🔄 button: drop the cached dataset so the next read comes fresh from Google
-  on('POST', '/api/admin/reload', async () => { adm = null; admRaw = null; await adminData(); return { ok: true }; });
+  on('POST', '/api/admin/reload', async () => { admBoot = false; await fetchAdm(false); return { ok: true }; });
+  // how old the shown admin data is (the saved copy, until Google's fresh answer arrives)
+  on('GET', '/api/admin/data-age', async () => ({ saved_at: admSavedAt, loading: !!admLoading }));
 
   // admin reads
   on('GET', '/api/admin/dashboard', async () => {
