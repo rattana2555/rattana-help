@@ -323,6 +323,12 @@
     else toast('มีข้อมูลใหม่จาก Google — กด 🔄 เพื่อโหลดหน้านี้ใหม่', 'info');
   });
   window.addEventListener('rh:admin-401', () => { if (me) { me = null; showLogin('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่'); } });
+  // Google slow or losing answers: the loading text says the site is still trying (the request is re-sent by itself)
+  window.addEventListener('rh:gas-try', e => {
+    const d = e.detail || {};
+    if (d.done) return;
+    document.querySelectorAll('.loading p').forEach(p => { p.textContent = `Google ตอบช้า — กำลังลองอีกครั้ง (${d.n}/${d.max})…`; });
+  });
 
   // ─────────────── OVERVIEW ───────────────
   async function pageOverview(id) {

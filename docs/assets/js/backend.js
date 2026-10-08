@@ -74,6 +74,45 @@
     }
   }
 
+  // Reading the admin dataset: Google sometimes sits on an answer for 30 s or more, or loses it (an error page) —
+  // a lost answer cannot be fetched again, only asked again. So when no answer has come after a few seconds, a
+  // second (then third…) request goes out alongside, and the first good answer wins. Reads only: a read run twice
+  // changes nothing. Pages hear of each new try ('rh:gas-try') so they can say what is going on.
+  const HEDGE_MAX = 6, HEDGE_EVERY = 9000, HEDGE_LIVE = 3;
+  function hedgedRead(action) {
+    const body = JSON.stringify({ action, token: token() });
+    const ok = SHAPE[action] || (() => true);
+    const once = async () => {
+      const ctl = window.AbortController ? new AbortController() : null;
+      const timer = ctl && setTimeout(() => ctl.abort(), 60_000);
+      let j = null;
+      try {
+        const res = await fetch(CFG.apiUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body, signal: ctl && ctl.signal });
+        try { j = await res.json(); } catch { /* error page */ }
+      } catch { /* network error / timeout */ } finally { clearTimeout(timer); }
+      if (j && j.ok === false) { if (j.status === 401) signedOut(); const e = new HttpErr(j.status || 500, j.error || 'เกิดข้อผิดพลาด'); e.final = true; throw e; }
+      if (j && j.ok && ok(j.data)) return j.data;
+      throw new HttpErr(503, 'ระบบ Google ตอบช้าหรือขัดข้องชั่วคราว กรุณาลองอีกครั้ง');
+    };
+    return new Promise((resolve, reject) => {
+      let started = 0, live = 0, done = false, timer = null;
+      const finish = (fn, v) => { if (done) return; done = true; clearInterval(timer); window.dispatchEvent(new CustomEvent('rh:gas-try', { detail: { done: true } })); fn(v); };
+      const launch = () => {
+        if (done || started >= HEDGE_MAX || live >= HEDGE_LIVE) return;
+        started++; live++;
+        if (started > 1) window.dispatchEvent(new CustomEvent('rh:gas-try', { detail: { n: started, max: HEDGE_MAX } }));
+        once().then(v => finish(resolve, v), e => {
+          live--;
+          if (e.final) return finish(reject, e);
+          if (started >= HEDGE_MAX && live === 0) return finish(reject, e);
+          setTimeout(launch, 800); // lost answer: ask again
+        });
+      };
+      timer = setInterval(launch, HEDGE_EVERY); // still waiting: ask once more alongside
+      launch();
+    });
+  }
+
   // ── public dataset: never make a visitor wait for Apps Script (1–10 s) ──
   // 1. returning visitor → last data from localStorage, instantly
   // 2. first visit → data/snapshot.json published with the site (GitHub Action, every 10 min), ~0.2 s
@@ -115,7 +154,7 @@
   const ADM_MAX = 3 * 86400000; // an older copy is not shown: wait for Google instead
   function fetchAdm(background) {
     if (!admLoading) {
-      admLoading = gasPost('adminData').then(d => {
+      admLoading = hedgedRead('adminData').then(d => {
         // a write may have answered while this read was on its way: keep whichever is newer
         if (adm && (adm.rev || 0) > (d.rev || 0)) return adm;
         const before = background && admRaw ? sameKey(admRaw) : null;
